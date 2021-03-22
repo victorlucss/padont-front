@@ -1,29 +1,56 @@
-import { useEffect, useRef } from 'react';
-import { useRouter } from 'next/router'
+import { useEffect, useState, useRef } from 'react';
+import { useRouter } from 'next/router';
+import { useToggle, useInterval } from 'react-use';
+
 
 import { Textarea } from 'components'
 
+import { padService } from 'api';
+
 export default function Pad() {
-  const router = useRouter()
-  const contentText = useRef('');
+  const router = useRouter();
+
+  const [changed, toggleChanged] = useToggle(false);
+  const [content, setContent] = useState({});
 
   const { query } = router;
-
-  console.log(query)
-
   
   const onChangePad = (text) => {
-    contentText.current = text;
+    toggleChanged(true);
+    setContent({
+      ...content,
+      text
+    })
+  }
+
+  const requestPad = async () => {
+    const data = await padService.get(query.padName)
+
+    setContent(data);
+  }
+
+  const savePad = async () => {
+    const data = {
+      ...content,
+      content: content.text,
+      updatedAt: new Date().toISOString()
+    }
+    await padService.put(query.padName, data)
+
+
   }
 
   useEffect(() => {
-    console.log(contentText.current)
-  }, [contentText])
-  
+    requestPad();
+  }, [query.padName])
+
+  useInterval(() => {
+    if (!changed) requestPad();
+    else savePad();
+    toggleChanged(false);
+  }, 5000)
 
   return (
-    <div>
-      <Textarea onChange={onChangePad} placeholder="Write something good here and share with anyone you like" />
-    </div>
+      <Textarea value={content.text || ''}  onChange={onChangePad} placeholder="Write something good here and share with anyone you like" />
   );
 }
