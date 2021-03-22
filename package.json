@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@carbon/icons-react": "^10.28.0",
     "@react-hook/resize-observer": "^1.2.0",
     "axios": "^0.21.1",
     "babel-plugin-styled-components": "^1.12.0",
