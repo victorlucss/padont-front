@@ -1,14 +1,24 @@
-import PropTypes from 'prop-types';
+import { useState } from "react";
+import PropTypes from "prop-types";
 
-import { InputStyled } from './styles';
+import { InputStyled } from "./styles";
 
-const Input = ({ placeholder }) => {
+const Input = ({ placeholder, onPressEnter }) => {
+  const [value, setValue] = useState("");
 
-  return <InputStyled placeholder={placeholder} />
+  return (
+    <InputStyled
+      value={value}
+      onChange={({ target }) => setValue(target.value)}
+      onKeyDown={(event) => event.key === "Enter" && onPressEnter(value)}
+      placeholder={placeholder}
+    />
+  );
 };
 
 Input.propTypes = {
-  placeholder: PropTypes.string
+  placeholder: PropTypes.string,
+  onPressEnter: PropTypes.func
 };
 
-export { Input }
+export { Input };
