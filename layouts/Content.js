@@ -26,6 +26,9 @@ const Content = styled.div`
   margin-left: auto;
   margin-right: auto;
 
+  width: 100%;
+  box-sizing: border-box;
+
   max-width: ${(props) => props.max};
   height: ${(props) => props.height};
   padding: ${(props) => props.padding};

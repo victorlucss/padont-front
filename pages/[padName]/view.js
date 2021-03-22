@@ -30,6 +30,10 @@ export default function Pad() {
   }, 5000);
 
   return (
-    <Content dangerouslySetInnerHTML={{ __html: contentHtml }} />
+    <Content>
+      <h1>{query.padName}</h1>
+
+      <div dangerouslySetInnerHTML={{ __html: contentHtml }}/>
+    </Content>
   );
 }
