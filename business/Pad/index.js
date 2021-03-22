@@ -26,18 +26,23 @@ const Pad = ({ name, subOf }) => {
   };
 
   const requestPad = async () => {
-    const data = await padService.get(name);
+    const padName = subOf ? `{${subOf}}-${name}` : name;
+    const data = await padService.get(padName);
 
     setContent(data);
   };
 
   const savePad = async () => {
+    const padName = subOf ? `{${subOf}}-${name}` : name;
+
     const data = {
       ...content,
+      title: name,
       text: content.text,
       updatedAt: new Date().toISOString()
     };
-    await padService.put(name, data);
+
+    await padService.put(padName, data);
   };
 
   const updateParentPad = async () => {
