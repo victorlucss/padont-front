@@ -2,11 +2,11 @@ import PropTypes from 'prop-types';
 
 import { TextareaWrapper, TextareaStyled, TextareaInfo } from './styles';
 
-const Textarea = ({ placeholder, onChange, color }) => {
+const Textarea = ({ placeholder, onChange, value = '' }) => {
 
   return (
     <TextareaWrapper>
-      <TextareaStyled onChange={({ target }) => onChange(target.value)} placeholder={placeholder} />
+      <TextareaStyled value={value} onChange={({ target }) => onChange(target.value)} placeholder={placeholder} />
       <TextareaInfo />
     </TextareaWrapper>
   )
@@ -14,6 +14,7 @@ const Textarea = ({ placeholder, onChange, color }) => {
 
 Textarea.propTypes = {
   placeholder: PropTypes.string,
+  value: PropTypes.string,
   color: PropTypes.string,
   onChange: PropTypes.func
 }
