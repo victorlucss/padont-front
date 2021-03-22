@@ -1,13 +1,9 @@
 import styled from 'styled-components';
 import { colors, metrics } from 'styles';
 
-const TextareaWrapper = styled.div``;
-
-const TextareaInfo = styled.div``;
-
 const TextareaStyled = styled.textarea`
   width: 100%;
-  height: 100vh;
+  height: 100%;
   font-family: 'Lato', sans-serif;
   box-sizing: border-box;
   background: ${colors.gray_dark};
@@ -16,10 +12,12 @@ const TextareaStyled = styled.textarea`
   color: ${colors.almost_white};
   resize: none;
 
+  padding-bottom: ${(props) => props.spaceBottom || 20}px;
+
   ::placeholder {
     color: ${colors.gray_light};
   }
   
 `;
 
-export { TextareaWrapper, TextareaStyled, TextareaInfo }
+export { TextareaStyled }

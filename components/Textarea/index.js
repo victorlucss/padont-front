@@ -1,23 +1,24 @@
-import PropTypes from 'prop-types';
+import PropTypes from "prop-types";
 
-import { TextareaWrapper, TextareaStyled, TextareaInfo } from './styles';
+import { TextareaStyled } from "./styles";
 
-const Textarea = ({ placeholder, onChange, value = '' }) => {
-
+const Textarea = ({ placeholder, onChange, value = "", spaceBottom }) => {
   return (
-    <TextareaWrapper>
-      <TextareaStyled value={value} onChange={({ target }) => onChange(target.value)} placeholder={placeholder} />
-      <TextareaInfo />
-    </TextareaWrapper>
-  )
+    <TextareaStyled
+      value={value}
+      onChange={({ target }) => onChange(target.value)}
+      placeholder={placeholder}
+      spaceBottom={spaceBottom}
+    />
+  );
 };
 
 Textarea.propTypes = {
   placeholder: PropTypes.string,
   value: PropTypes.string,
   color: PropTypes.string,
-  onChange: PropTypes.func
-}
+  onChange: PropTypes.func,
+  spaceBottom: PropTypes.number
+};
 
-
-export { Textarea }
+export { Textarea };
