@@ -6,7 +6,7 @@ import { Time32, Launch32 } from '@carbon/icons-react';
 
 import { Textarea } from "components";
 import { Container, Content } from 'layouts';
-import { TextareaWrapper, Info, Title } from "./styles";
+import { TextareaWrapper, Info, Title } from "../../styles/padStyles";
 
 import { padService } from "api";
 
