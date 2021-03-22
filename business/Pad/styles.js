@@ -1,3 +1,4 @@
+
 import styled from 'styled-components';
 import { colors, metrics } from 'styles';
 
@@ -18,6 +19,12 @@ const Title = styled.div`
 
   a, a:link, a:visited {
     border-bottom: none;
+  }
+
+  h2 {
+    a:hover {
+      color: ${colors.orange};
+    }
   }
 
   .icon {
@@ -45,21 +52,38 @@ const Info = styled.div`
   }
 `;
 
-const TextareaStyled = styled.textarea`
-  width: 100%;
-  height: 100vh;
-  font-family: 'Lato', sans-serif;
-  box-sizing: border-box;
-  
-  padding: 20px;
-  border-radius: ${metrics.borderRadius}px;
-  color: ${colors.almost_white};
-  resize: none;
 
-  ::placeholder {
-    color: ${colors.gray_light};
+const Subpads = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding-top: 75px;
+  min-width: 200px;
+  `;
+
+const Subpad = styled.div`
+  font-size: 13px;
+  width: 100%;
+  box-sizing: border-box;
+  background: ${colors.dark_blue};
+  border: 1px solid transparent;
+  border-left: 3px solid ${colors.blue};
+  border-radius: ${metrics.borderRadius}px;
+  display: flex;
+  align-items: center;
+  padding: 20px;
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+  box-shadow: 0 2px 15px -2px transparent;
+
+  &:hover {
+    border-color: ${colors.blue};
+    box-shadow: 0 2px 15px -2px ${colors.blue}55;
   }
-  
+
+  &:not(:first-child) {
+    margin-top: 10px;
+  }
 `;
 
-export { TextareaWrapper, TextareaStyled, Info, Title }
+export { TextareaWrapper, Info, Title, Subpads, Subpad}

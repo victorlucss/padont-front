@@ -1,0 +1,69 @@
+{
+  "parser": "babel-eslint",
+  "extends": [
+    "airbnb",
+    "prettier",
+    "prettier/react",
+    "plugin:jsx-a11y/recommended"
+  ],
+  "plugins": ["react", "react-native", "prettier", "jsx-a11y"],
+  "parserOptions": {
+    "ecmaFeatures": {
+      "jsx": true,
+      "modules": true
+    }
+  },
+  "rules": {
+    "no-param-reassign": [2, { "props": false }],
+    "react/react-in-jsx-scope": "off",
+    "no-underscore-dangle": "off",
+    "prefer-destructuring": "off",
+    "react/jsx-filename-extension": "off",
+    "import/prefer-default-export": "off",
+    "import/no-unresolved": "off",
+    "import/no-extraneous-dependencies": [
+      "error",
+      {
+        "devDependencies": true,
+        "optionalDependencies": false,
+        "peerDependencies": false
+      }
+    ],
+    "prettier/prettier": [
+      "error",
+      {
+        "trailingComma": "none",
+        "singleQuote": true,
+        "printWidth": 100,
+        "quotes": ["all", "single"]
+      }
+    ],
+    "react/jsx-props-no-spreading": 0,
+    "react-native/no-unused-styles": 2,
+    "react-native/no-color-literals": 2,
+    "react/jsx-curly-newline": "off",
+    "jsx-a11y/label-has-associated-control": "off",
+    "jsx-a11y/no-autofocus": "off",
+    "react/button-has-type": 0,
+    "react-hooks/exhaustive-deps": "off"
+  },
+  "overrides": [
+    {
+      "files": ["*test.js"],
+      "rules": {
+        "prefer-const": "off",
+        "no-return-assign": "off"
+      }
+    }
+  ],
+  "env": {
+    "jest": true
+  },
+  "globals": {
+    "document": false,
+    "fetch": false,
+    "navigator": false,
+    "__DEV__": false,
+    "window": false
+  }
+}
