@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "jest --passWithNoTests"
   },
   "dependencies": {
     "@carbon/icons-react": "^10.28.0",
@@ -21,8 +22,14 @@
     "styled-components": "^5.2.1"
   },
   "devDependencies": {
+    "@testing-library/dom": "^8.0.0",
+    "@testing-library/jest-dom": "^5.14.1",
+    "@testing-library/react": "^11.2.6",
+    "babel-jest": "^27.0.5",
     "eslint": "^7.22.0",
     "eslint-plugin-react": "^7.22.0",
+    "jest": "^27.0.5",
+    "jest-dom": "^4.0.0",
     "sass": "^1.32.8"
   }
 }
