@@ -8,6 +8,7 @@ const Input = ({ placeholder, onPressEnter }) => {
 
   return (
     <InputStyled
+      role="input"
       value={value}
       onChange={({ target }) => setValue(target.value)}
       onKeyDown={(event) => event.key === "Enter" && onPressEnter(value)}
@@ -22,3 +23,4 @@ Input.propTypes = {
 };
 
 export { Input };
+export default Input;
