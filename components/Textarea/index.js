@@ -5,6 +5,7 @@ import { TextareaStyled } from "./styles";
 const Textarea = ({ placeholder, onChange, value = "", spaceBottom }) => {
   return (
     <TextareaStyled
+      role="textbox"
       value={value}
       onChange={({ target }) => onChange(target.value)}
       placeholder={placeholder}
@@ -16,9 +17,9 @@ const Textarea = ({ placeholder, onChange, value = "", spaceBottom }) => {
 Textarea.propTypes = {
   placeholder: PropTypes.string,
   value: PropTypes.string,
-  color: PropTypes.string,
   onChange: PropTypes.func,
   spaceBottom: PropTypes.number
 };
 
 export { Textarea };
+export default Textarea;
