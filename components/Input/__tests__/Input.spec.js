@@ -1,6 +1,6 @@
 import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 
-import Input from '../';
+import Input from '..';
 
 const defaultProps = {
   placeholder: "Input placeholder",
