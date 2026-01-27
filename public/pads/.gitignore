@@ -1,1 +1,5 @@
+# Ignore all pad JSON files
 *.json
+
+# Keep the .gitkeep file
+!.gitkeep
