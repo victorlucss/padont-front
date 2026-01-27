@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { useEffect, useState } from "react";
 import { useToggle, useInterval } from "react-use";
 
-import { Time32, Launch32 } from '@carbon/icons-react';
+import { Time, Launch } from '@carbon/icons-react';
 
 import { Textarea } from "components";
 import { Content } from 'layouts';
@@ -94,7 +94,7 @@ const Pad = ({ name, subOf }) => {
           )}
           {name}</h2>
         <a href={`${name}/view`} target="_blank" rel="noreferrer">
-          <Launch32 with={20} height={20} className="icon" />
+          <Launch size={20} className="icon" />
         </a>
       </Title>
 
@@ -106,7 +106,7 @@ const Pad = ({ name, subOf }) => {
           spaceBottom={80}
         />
         <Info>
-          <Time32 width={20} height={20} />
+          <Time size={20} />
           <span>
             Last updated at {formatDate(content.updatedAt) || "never"}
           </span>
