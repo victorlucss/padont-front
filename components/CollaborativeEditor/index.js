@@ -122,18 +122,21 @@ function TiptapEditor({ collab, placeholder }) {
     };
   }, [provider, ydoc]);
 
+  // Create extensions array once
+  const extensions = [
+    StarterKit.configure({ codeBlock: false, history: false }),
+    Placeholder.configure({ placeholder }),
+    Table.configure({ resizable: true }),
+    TableRow,
+    TableHeader,
+    TableCell,
+    CodeBlockLowlight.configure({ lowlight }),
+    Collaboration.configure({ document: ydoc }),
+    // Skip cursor for now - debug
+  ];
+
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ codeBlock: false, history: false }),
-      Placeholder.configure({ placeholder }),
-      Table.configure({ resizable: true }),
-      TableRow,
-      TableHeader,
-      TableCell,
-      CodeBlockLowlight.configure({ lowlight }),
-      Collaboration.configure({ document: ydoc }),
-      createCursorExtension(provider, user),
-    ],
+    extensions,
     editorProps: { attributes: { spellcheck: 'false' } },
   });
 
