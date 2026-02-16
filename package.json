@@ -3,11 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "dev:party": "npx partykit dev",
+    "dev": "node server.js",
+    "dev:next": "next dev",
     "build": "next build",
-    "start": "next start",
-    "deploy:party": "npx partykit deploy",
+    "start": "NODE_ENV=production node server.js",
     "test": "jest --passWithNoTests"
   },
   "dependencies": {

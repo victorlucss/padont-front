@@ -14,7 +14,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
 
@@ -22,35 +22,29 @@ RUN npm run build
 FROM base AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy necessary files
-COPY --from=builder /app/public ./public
+# Copy standalone build
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/server ./server
+COPY --from=builder /app/public ./public
+
+# Copy custom server and its dependencies
+COPY --from=builder /app/server.js ./server.js
 COPY --from=builder /app/node_modules/y-websocket ./node_modules/y-websocket
 COPY --from=builder /app/node_modules/yjs ./node_modules/yjs
 COPY --from=builder /app/node_modules/ws ./node_modules/ws
 COPY --from=builder /app/node_modules/lib0 ./node_modules/lib0
 
-# Create startup script
-RUN echo '#!/bin/sh' > /app/start.sh && \
-    echo 'node server/collab.js &' >> /app/start.sh && \
-    echo 'node server.js' >> /app/start.sh && \
-    chmod +x /app/start.sh
-
 USER nextjs
 
 EXPOSE 3000
-EXPOSE 1234
 
-ENV PORT 3000
-ENV COLLAB_PORT 1234
-ENV HOSTNAME "0.0.0.0"
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
-CMD ["/app/start.sh"]
+CMD ["node", "server.js"]

@@ -1,8 +1,8 @@
 import Link from 'next/link'
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useToggle, useInterval } from "react-use";
 
-import { Editor } from 'components';
+import { Editor, CollaborativeEditor } from 'components';
 import {
   PadContainer,
   PadHeader,
@@ -23,10 +23,24 @@ import {
 import { padService } from "api";
 import formatDate from 'utils/formatDate';
 
+// Get collaboration URL from env (same origin by default)
+const COLLAB_URL = process.env.NEXT_PUBLIC_COLLAB_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+
 const Pad = ({ name, subOf }) => {
   const [changed, toggleChanged] = useToggle(false);
   const [saving, setSaving] = useState(false);
   const [content, setContent] = useState({});
+  const [collabSynced, setCollabSynced] = useState(false);
+
+  // Room name for collaboration
+  const roomName = useMemo(() => {
+    const padName = subOf ? `${subOf}-${name}` : name;
+    // Sanitize room name for PartyKit (alphanumeric + hyphens)
+    return padName.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
+  }, [name, subOf]);
+
+  // Check if collaboration is enabled (always enabled with same-origin WebSocket)
+  const isCollabEnabled = Boolean(COLLAB_URL);
 
   const onChangePad = (text) => {
     toggleChanged(true);
@@ -69,8 +83,11 @@ const Pad = ({ name, subOf }) => {
   };
 
   useEffect(() => {
-    requestPad();
-  }, [name]);
+    // Only fetch initial content if not using collab (collab handles its own state)
+    if (!isCollabEnabled) {
+      requestPad();
+    }
+  }, [name, isCollabEnabled]);
 
   useEffect(() => {
     if (subOf) {
@@ -78,7 +95,10 @@ const Pad = ({ name, subOf }) => {
     }
   }, [subOf]);
 
+  // Auto-save interval only for non-collab mode
   useInterval(() => {
+    if (isCollabEnabled) return; // Skip for collab mode
+    
     if (!changed) requestPad();
     else savePad();
     toggleChanged(false);
@@ -132,22 +152,33 @@ const Pad = ({ name, subOf }) => {
       <PadBody>
         <EditorWrapper>
           <TextareaWrapper>
-            <Editor
-              value={content.text || ""}
-              onChange={onChangePad}
-              placeholder="Start writing..."
-            />
+            {isCollabEnabled ? (
+              <CollaborativeEditor
+                roomName={roomName}
+                collabUrl={COLLAB_URL}
+                placeholder="Start writing... (collaborative mode)"
+                onSynced={() => setCollabSynced(true)}
+              />
+            ) : (
+              <Editor
+                value={content.text || ""}
+                onChange={onChangePad}
+                placeholder="Start writing..."
+              />
+            )}
           </TextareaWrapper>
           
-          <Info>
-            <StatusDot $saved={!changed && !saving} $saving={saving} />
-            <span>
-              {saving ? 'Saving...' : changed ? 'Unsaved changes' : 'Saved'}
-              {content.updatedAt && !saving && !changed && (
-                <> · Last edit {formatDate(content.updatedAt)}</>
-              )}
-            </span>
-          </Info>
+          {!isCollabEnabled && (
+            <Info>
+              <StatusDot $saved={!changed && !saving} $saving={saving} />
+              <span>
+                {saving ? 'Saving...' : changed ? 'Unsaved changes' : 'Saved'}
+                {content.updatedAt && !saving && !changed && (
+                  <> · Last edit {formatDate(content.updatedAt)}</>
+                )}
+              </span>
+            </Info>
+          )}
         </EditorWrapper>
       </PadBody>
     </PadContainer>
