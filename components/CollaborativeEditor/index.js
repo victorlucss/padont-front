@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useEditor, EditorContent as TiptapContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -54,8 +54,41 @@ const icons = {
   hr: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="2" y1="12" x2="22" y2="12" /></svg>,
 };
 
-// Inner component that receives ready-to-use collab objects
-function TiptapEditor({ ydoc, provider, user, placeholder, status, users }) {
+// Inner component - only mounted when collab is ready
+function TiptapEditor({ collab, placeholder }) {
+  const [status, setStatus] = useState('connecting');
+  const [users, setUsers] = useState([]);
+  
+  const { ydoc, provider, user } = collab;
+
+  // Setup event listeners
+  useEffect(() => {
+    const handleStatus = ({ status: s }) => {
+      console.log('[Collab] Status:', s);
+      setStatus(s);
+    };
+
+    const handleAwareness = () => {
+      const states = provider.awareness.getStates();
+      const list = [];
+      states.forEach((state, clientId) => {
+        if (state.user && clientId !== ydoc.clientID) list.push(state.user);
+      });
+      setUsers(list);
+    };
+
+    provider.on('status', handleStatus);
+    provider.awareness.on('change', handleAwareness);
+    
+    // Initial check
+    handleAwareness();
+
+    return () => {
+      provider.off('status', handleStatus);
+      provider.awareness.off('change', handleAwareness);
+    };
+  }, [provider, ydoc]);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ codeBlock: false, history: false }),
@@ -66,8 +99,7 @@ function TiptapEditor({ ydoc, provider, user, placeholder, status, users }) {
       TableCell,
       CodeBlockLowlight.configure({ lowlight }),
       Collaboration.configure({ document: ydoc }),
-      // CollaborationCursor temporarily disabled for debugging
-      // CollaborationCursor.configure({ provider, user }),
+      CollaborationCursor.configure({ provider, user }),
     ],
     editorProps: { attributes: { spellcheck: 'false' } },
   });
@@ -121,21 +153,15 @@ function TiptapEditor({ ydoc, provider, user, placeholder, status, users }) {
   );
 }
 
-// Wrapper that handles provider lifecycle
+// Main component - handles provider lifecycle
 const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', collabUrl }) => {
-  const [isReady, setIsReady] = useState(false);
-  const [status, setStatus] = useState('connecting');
-  const [users, setUsers] = useState([]);
-  
-  // Use refs to store objects that should persist across renders
-  const ydocRef = useRef(null);
-  const providerRef = useRef(null);
-  const userRef = useRef(null);
+  // Single atomic state for all collab objects
+  const [collab, setCollab] = useState(null);
 
   useEffect(() => {
     if (!collabUrl || !roomName) return;
 
-    // Create objects once
+    // Create all objects at once
     const user = { name: getRandomName(), color: getRandomColor() };
     const ydoc = new Y.Doc();
     const wsUrl = collabUrl.replace(/^http/, 'ws') + '/collab';
@@ -149,68 +175,26 @@ const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', colla
 
     provider.awareness.setLocalStateField('user', user);
 
-    // Store in refs
-    ydocRef.current = ydoc;
-    providerRef.current = provider;
-    userRef.current = user;
-
-    // Event handlers
-    const handleStatus = ({ status: s }) => {
-      console.log('[Collab] Status:', s);
-      setStatus(s);
-    };
-
-    const handleSync = (synced) => {
-      console.log('[Collab] Synced:', synced);
-      if (synced) setIsReady(true);
-    };
-
-    const handleAwareness = () => {
-      const states = provider.awareness.getStates();
-      const list = [];
-      states.forEach((state, clientId) => {
-        if (state.user && clientId !== ydoc.clientID) list.push(state.user);
-      });
-      setUsers(list);
-    };
-
-    provider.on('status', handleStatus);
-    provider.on('sync', handleSync);
-    provider.awareness.on('change', handleAwareness);
-
-    // Set ready after a short delay even if sync doesn't fire
-    const timeout = setTimeout(() => setIsReady(true), 1000);
+    // Set state atomically - this ensures TiptapEditor only mounts with valid objects
+    setCollab({ ydoc, provider, user });
 
     return () => {
-      clearTimeout(timeout);
-      provider.off('status', handleStatus);
-      provider.off('sync', handleSync);
-      provider.awareness.off('change', handleAwareness);
+      console.log('[Collab] Cleanup');
+      setCollab(null); // Clear state FIRST
       provider.disconnect();
       provider.destroy();
       ydoc.destroy();
-      ydocRef.current = null;
-      providerRef.current = null;
-      userRef.current = null;
-      setIsReady(false);
     };
   }, [collabUrl, roomName]);
 
   return (
     <EditorContainer>
-      {isReady && ydocRef.current && providerRef.current && userRef.current ? (
-        <TiptapEditor
-          ydoc={ydocRef.current}
-          provider={providerRef.current}
-          user={userRef.current}
-          placeholder={placeholder}
-          status={status}
-          users={users}
-        />
+      {collab ? (
+        <TiptapEditor collab={collab} placeholder={placeholder} />
       ) : (
         <div style={{ padding: 24, color: '#666', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <CollabDot $status={status} />
-          <span>Connecting to collaboration server...</span>
+          <CollabDot $status="connecting" />
+          <span>Connecting...</span>
         </div>
       )}
     </EditorContainer>
