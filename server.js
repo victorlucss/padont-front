@@ -158,6 +158,17 @@ app.prepare().then(() => {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
+  // Periodic save - every 10 seconds, save all active docs
+  setInterval(() => {
+    docs.forEach((doc, docName) => {
+      const state = Y.encodeStateAsUpdate(doc);
+      if (state.length > 2) {
+        saveDocument(docName, state);
+        console.log(`[DB] Auto-save: ${docName} (${state.length} bytes)`);
+      }
+    });
+  }, 10000);
+
   server.listen(port, hostname, () => {
     console.log(`🚀 Server ready at http://${hostname}:${port}`);
     console.log(`📝 Collab: ws://${hostname}:${port}/collab/{room}`);
