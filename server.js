@@ -15,8 +15,9 @@ const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
 const port = parseInt(process.env.PORT, 10) || 3000;
 
-// Track documents that need saving (debounce)
+// Track save timeouts and initialized docs
 const pendingSaves = new Map();
+const initializedDocs = new Set();
 const SAVE_DELAY = 2000;
 
 /**
@@ -31,35 +32,44 @@ function scheduleSave(docName) {
     const doc = docs.get(docName);
     if (doc) {
       const state = Y.encodeStateAsUpdate(doc);
-      saveDocument(docName, state);
-      console.log(`[DB] Saved: ${docName} (${state.length} bytes)`);
+      if (state.length > 2) { // Only save non-empty docs
+        saveDocument(docName, state);
+        console.log(`[DB] Saved: ${docName} (${state.length} bytes)`);
+      }
     }
     pendingSaves.delete(docName);
   }, SAVE_DELAY));
 }
 
 /**
- * Initialize document with saved state from DB
+ * Get or create a document with persistence
+ * This runs BEFORE y-websocket sees the connection
  */
-function initDocFromDB(docName) {
-  const doc = docs.get(docName);
-  if (!doc) return;
+function ensureDoc(docName) {
+  let doc = docs.get(docName);
   
-  // Check if doc is empty (new)
-  const state = Y.encodeStateAsUpdate(doc);
-  if (state.length <= 2) { // Empty doc is ~2 bytes
+  if (!doc) {
+    // Create new Yjs document
+    doc = new Y.Doc();
+    doc.gc = true;
+    
+    // Load from database FIRST
     const savedState = getDocument(docName);
-    if (savedState) {
+    if (savedState && savedState.length > 2) {
       Y.applyUpdate(doc, savedState);
-      console.log(`[DB] Restored: ${docName} (${savedState.length} bytes)`);
+      console.log(`[DB] Loaded: ${docName} (${savedState.length} bytes)`);
     }
+    
+    // Register in y-websocket's docs map
+    docs.set(docName, doc);
+    
+    // Setup persistence on updates
+    doc.on('update', () => scheduleSave(docName));
+    
+    initializedDocs.add(docName);
   }
   
-  // Setup save on update (only once per doc)
-  if (!doc._persistenceInitialized) {
-    doc._persistenceInitialized = true;
-    doc.on('update', () => scheduleSave(docName));
-  }
+  return doc;
 }
 
 const app = next({ dev, hostname, port });
@@ -70,7 +80,6 @@ app.prepare().then(() => {
     try {
       const parsedUrl = parse(req.url, true);
       
-      // Health check endpoint
       if (parsedUrl.pathname === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ 
@@ -81,7 +90,6 @@ app.prepare().then(() => {
         return;
       }
       
-      // List documents endpoint
       if (parsedUrl.pathname === '/api/documents') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(listDocuments(100)));
@@ -90,44 +98,43 @@ app.prepare().then(() => {
       
       await handle(req, res, parsedUrl);
     } catch (err) {
-      console.error('Error handling request:', err);
+      console.error('Error:', err);
       res.statusCode = 500;
       res.end('Internal server error');
     }
   });
 
-  // WebSocket server for Yjs collaboration
   const wss = new WebSocket.Server({ noServer: true });
 
   wss.on('connection', (ws, req, docName) => {
-    console.log(`[Collab] Client connected to: ${docName}`);
+    console.log(`[Collab] Connected: ${docName}`);
     
-    // Let y-websocket handle the connection
+    // Ensure doc exists with persisted data BEFORE y-websocket
+    ensureDoc(docName);
+    
+    // Now let y-websocket handle sync
     setupWSConnection(ws, req, { docName, gc: true });
     
-    // After setup, initialize persistence
-    setTimeout(() => initDocFromDB(docName), 100);
-    
     ws.on('close', () => {
-      console.log(`[Collab] Client disconnected from: ${docName}`);
+      console.log(`[Collab] Disconnected: ${docName}`);
       
-      // Force save on disconnect
+      // Save on disconnect
       const doc = docs.get(docName);
       if (doc) {
         const state = Y.encodeStateAsUpdate(doc);
-        saveDocument(docName, state);
-        console.log(`[DB] Saved on disconnect: ${docName}`);
+        if (state.length > 2) {
+          saveDocument(docName, state);
+          console.log(`[DB] Saved on close: ${docName}`);
+        }
       }
     });
   });
 
-  // Handle upgrade requests
   server.on('upgrade', (req, socket, head) => {
     const { pathname } = parse(req.url);
     
     if (pathname && pathname.startsWith('/collab/')) {
       const docName = pathname.slice(8) || 'default';
-      
       wss.handleUpgrade(req, socket, head, (ws) => {
         wss.emit('connection', ws, req, docName);
       });
@@ -136,13 +143,14 @@ app.prepare().then(() => {
     }
   });
 
-  // Graceful shutdown
   const shutdown = () => {
     console.log('\n[Server] Shutting down...');
     docs.forEach((doc, docName) => {
       const state = Y.encodeStateAsUpdate(doc);
-      saveDocument(docName, state);
-      console.log(`[DB] Final save: ${docName}`);
+      if (state.length > 2) {
+        saveDocument(docName, state);
+        console.log(`[DB] Final save: ${docName}`);
+      }
     });
     process.exit(0);
   };
@@ -152,7 +160,7 @@ app.prepare().then(() => {
 
   server.listen(port, hostname, () => {
     console.log(`🚀 Server ready at http://${hostname}:${port}`);
-    console.log(`📝 Collaboration at ws://${hostname}:${port}/collab/{room}`);
-    console.log(`💾 SQLite persistence enabled`);
+    console.log(`📝 Collab: ws://${hostname}:${port}/collab/{room}`);
+    console.log(`💾 SQLite: ${require('./lib/db').dbPath}`);
   });
 });
