@@ -28,13 +28,13 @@ import {
 const lowlight = createLowlight(common);
 
 const getRandomColor = () => {
-  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9'];
+  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9', '#E4FF1A', '#FF69B4', '#00CED1', '#FF8C00', '#9370DB'];
   return colors[Math.floor(Math.random() * colors.length)];
 };
 
 const getRandomName = () => {
-  const adjectives = ['Swift', 'Clever', 'Bold', 'Quiet', 'Bright'];
-  const nouns = ['Fox', 'Owl', 'Bear', 'Wolf', 'Hawk'];
+  const adjectives = ['Swift', 'Clever', 'Bold', 'Quiet', 'Bright', 'Wild', 'Cosmic', 'Lucky', 'Mystic', 'Noble'];
+  const nouns = ['Fox', 'Owl', 'Bear', 'Wolf', 'Hawk', 'Tiger', 'Dragon', 'Phoenix', 'Raven', 'Lynx'];
   return `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`;
 };
 
@@ -66,7 +66,24 @@ const EditorWithProvider = ({ ydoc, provider, user, placeholder }) => {
       TableCell,
       CodeBlockLowlight.configure({ lowlight }),
       Collaboration.configure({ document: ydoc }),
-      CollaborationCursor.configure({ provider, user }),
+      CollaborationCursor.configure({
+        provider,
+        user,
+        render: (cursorUser) => {
+          const cursor = document.createElement('span');
+          cursor.classList.add('collaboration-cursor__caret');
+          cursor.style.borderColor = cursorUser.color;
+          
+          const label = document.createElement('div');
+          label.classList.add('collaboration-cursor__label');
+          label.style.backgroundColor = cursorUser.color;
+          label.style.color = '#000';
+          label.textContent = cursorUser.name;
+          cursor.appendChild(label);
+          
+          return cursor;
+        },
+      }),
     ],
     editorProps: { attributes: { spellcheck: 'false' } },
   });
@@ -108,14 +125,11 @@ const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', colla
   const [provider, setProvider] = useState(null);
   const [isReady, setIsReady] = useState(false);
   
-  const user = useMemo(() => {
-    if (typeof window === 'undefined') return { name: getRandomName(), color: getRandomColor() };
-    const stored = localStorage.getItem('padont-user');
-    if (stored) try { return JSON.parse(stored); } catch {}
-    const newUser = { name: getRandomName(), color: getRandomColor() };
-    localStorage.setItem('padont-user', JSON.stringify(newUser));
-    return newUser;
-  }, []);
+  // New random identity for each session (no persistence)
+  const user = useMemo(() => ({
+    name: getRandomName(),
+    color: getRandomColor(),
+  }), []);
 
   const ydoc = useMemo(() => new Y.Doc(), []);
 
