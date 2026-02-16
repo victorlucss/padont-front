@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useEditor, EditorContent as TiptapContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -54,65 +54,10 @@ const icons = {
   hr: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="2" y1="12" x2="22" y2="12" /></svg>,
 };
 
-const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', collabUrl }) => {
-  const [status, setStatus] = useState('connecting');
-  const [users, setUsers] = useState([]);
-
-  // Create all collaboration objects synchronously and stably
-  const collab = useMemo(() => {
-    if (typeof window === 'undefined' || !collabUrl || !roomName) return null;
-
-    const user = { name: getRandomName(), color: getRandomColor() };
-    const ydoc = new Y.Doc();
-    const wsUrl = collabUrl.replace(/^http/, 'ws') + '/collab';
-    
-    console.log('[Collab] Creating provider:', wsUrl, roomName);
-    
-    const provider = new WebsocketProvider(wsUrl, roomName, ydoc, {
-      connect: true,
-      maxBackoffTime: 5000,
-    });
-
-    provider.awareness.setLocalStateField('user', user);
-
-    return { ydoc, provider, user };
-  }, [collabUrl, roomName]);
-
-  // Setup event listeners
-  useEffect(() => {
-    if (!collab) return;
-
-    const { provider, ydoc } = collab;
-
-    const handleStatus = ({ status: s }) => {
-      console.log('[Collab] Status:', s);
-      setStatus(s);
-    };
-
-    const handleAwareness = () => {
-      const states = provider.awareness.getStates();
-      const list = [];
-      states.forEach((state, clientId) => {
-        if (state.user && clientId !== ydoc.clientID) list.push(state.user);
-      });
-      setUsers(list);
-    };
-
-    provider.on('status', handleStatus);
-    provider.awareness.on('change', handleAwareness);
-
-    return () => {
-      provider.off('status', handleStatus);
-      provider.awareness.off('change', handleAwareness);
-      provider.disconnect();
-      provider.destroy();
-      ydoc.destroy();
-    };
-  }, [collab]);
-
-  // Create editor with collaboration
+// Inner component that receives ready-to-use collab objects
+function TiptapEditor({ ydoc, provider, user, placeholder, status, users }) {
   const editor = useEditor({
-    extensions: collab ? [
+    extensions: [
       StarterKit.configure({ codeBlock: false, history: false }),
       Placeholder.configure({ placeholder }),
       Table.configure({ resizable: true }),
@@ -120,10 +65,10 @@ const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', colla
       TableHeader,
       TableCell,
       CodeBlockLowlight.configure({ lowlight }),
-      Collaboration.configure({ document: collab.ydoc }),
+      Collaboration.configure({ document: ydoc }),
       CollaborationCursor.configure({
-        provider: collab.provider,
-        user: collab.user,
+        provider,
+        user,
         render: (u) => {
           const cursor = document.createElement('span');
           cursor.classList.add('collaboration-cursor__caret');
@@ -136,26 +81,17 @@ const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', colla
           return cursor;
         },
       }),
-    ] : [
-      StarterKit,
-      Placeholder.configure({ placeholder }),
     ],
     editorProps: { attributes: { spellcheck: 'false' } },
-  }, [collab]);
+  });
 
-  if (!editor) {
-    return (
-      <EditorContainer>
-        <div style={{ padding: 24, color: '#666' }}>Loading...</div>
-      </EditorContainer>
-    );
-  }
+  if (!editor) return <div style={{ padding: 24, color: '#666' }}>Loading editor...</div>;
 
   const addTable = () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
   const statusText = { connecting: 'Connecting...', connected: 'Live', disconnected: 'Offline' };
 
   return (
-    <EditorContainer>
+    <>
       <Toolbar>
         <ToolbarButton onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} $active={editor.isActive('heading', { level: 1 })} title="H1">{icons.h1}</ToolbarButton>
         <ToolbarButton onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} $active={editor.isActive('heading', { level: 2 })} title="H2">{icons.h2}</ToolbarButton>
@@ -194,6 +130,102 @@ const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', colla
       <EditorContent>
         <TiptapContent editor={editor} />
       </EditorContent>
+    </>
+  );
+}
+
+// Wrapper that handles provider lifecycle
+const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', collabUrl }) => {
+  const [isReady, setIsReady] = useState(false);
+  const [status, setStatus] = useState('connecting');
+  const [users, setUsers] = useState([]);
+  
+  // Use refs to store objects that should persist across renders
+  const ydocRef = useRef(null);
+  const providerRef = useRef(null);
+  const userRef = useRef(null);
+
+  useEffect(() => {
+    if (!collabUrl || !roomName) return;
+
+    // Create objects once
+    const user = { name: getRandomName(), color: getRandomColor() };
+    const ydoc = new Y.Doc();
+    const wsUrl = collabUrl.replace(/^http/, 'ws') + '/collab';
+    
+    console.log('[Collab] Creating:', wsUrl, roomName);
+    
+    const provider = new WebsocketProvider(wsUrl, roomName, ydoc, {
+      connect: true,
+      maxBackoffTime: 5000,
+    });
+
+    provider.awareness.setLocalStateField('user', user);
+
+    // Store in refs
+    ydocRef.current = ydoc;
+    providerRef.current = provider;
+    userRef.current = user;
+
+    // Event handlers
+    const handleStatus = ({ status: s }) => {
+      console.log('[Collab] Status:', s);
+      setStatus(s);
+    };
+
+    const handleSync = (synced) => {
+      console.log('[Collab] Synced:', synced);
+      if (synced) setIsReady(true);
+    };
+
+    const handleAwareness = () => {
+      const states = provider.awareness.getStates();
+      const list = [];
+      states.forEach((state, clientId) => {
+        if (state.user && clientId !== ydoc.clientID) list.push(state.user);
+      });
+      setUsers(list);
+    };
+
+    provider.on('status', handleStatus);
+    provider.on('sync', handleSync);
+    provider.awareness.on('change', handleAwareness);
+
+    // Set ready after a short delay even if sync doesn't fire
+    const timeout = setTimeout(() => setIsReady(true), 1000);
+
+    return () => {
+      clearTimeout(timeout);
+      provider.off('status', handleStatus);
+      provider.off('sync', handleSync);
+      provider.awareness.off('change', handleAwareness);
+      provider.disconnect();
+      provider.destroy();
+      ydoc.destroy();
+      ydocRef.current = null;
+      providerRef.current = null;
+      userRef.current = null;
+      setIsReady(false);
+    };
+  }, [collabUrl, roomName]);
+
+  return (
+    <EditorContainer>
+      {isReady && ydocRef.current && providerRef.current && userRef.current ? (
+        <TiptapEditor
+          ydoc={ydocRef.current}
+          provider={providerRef.current}
+          user={userRef.current}
+          placeholder={placeholder}
+          status={status}
+          users={users}
+        />
+      ) : (
+        <div style={{ padding: 24, color: '#666', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <CollabDot $status={status} />
+          <span>Connecting to collaboration server...</span>
+        </div>
+      )}
     </EditorContainer>
   );
 };
