@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useEditor, EditorContent as TiptapContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -7,7 +7,11 @@ import { TableRow } from '@tiptap/extension-table-row';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import Collaboration from '@tiptap/extension-collaboration';
+import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import { common, createLowlight } from 'lowlight';
+import * as Y from 'yjs';
+import YPartyKitProvider from 'y-partykit/provider';
 
 import {
   EditorContainer,
@@ -15,9 +19,38 @@ import {
   ToolbarDivider,
   ToolbarButton,
   EditorContent,
+  CollaboratorsBar,
+  CollaboratorBadge,
 } from './styles';
 
 const lowlight = createLowlight(common);
+
+// PartyKit host - set via env or use default
+const PARTYKIT_HOST = 'padont-collab.victorlucss.partykit.dev';
+
+// Generate random color for cursor
+const getRandomColor = () => {
+  const colors = [
+    '#e4ff1a', // accent yellow
+    '#ff6b6b', // coral
+    '#4ecdc4', // teal
+    '#45b7d1', // sky blue
+    '#96ceb4', // sage
+    '#ffeaa7', // cream
+    '#a29bfe', // lavender
+    '#fd79a8', // pink
+    '#00b894', // mint
+    '#e17055', // terra
+  ];
+  return colors[Math.floor(Math.random() * colors.length)];
+};
+
+// Generate random name
+const getRandomName = () => {
+  const adjectives = ['Swift', 'Clever', 'Bold', 'Bright', 'Quick', 'Sharp', 'Calm', 'Keen'];
+  const nouns = ['Writer', 'Editor', 'Author', 'Scribe', 'Poet', 'Creator', 'Maker', 'Thinker'];
+  return `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`;
+};
 
 // Icons
 const icons = {
@@ -111,11 +144,97 @@ const icons = {
   ),
 };
 
-const Editor = ({ value, onChange, placeholder = 'Start writing...' }) => {
+const Editor = ({ value, onChange, placeholder = 'Start writing...', roomName = 'default' }) => {
+  const [collaborators, setCollaborators] = useState([]);
+  const [isConnected, setIsConnected] = useState(false);
+
+  // User identity (persisted in sessionStorage)
+  const user = useMemo(() => {
+    if (typeof window === 'undefined') return { name: 'Anonymous', color: '#888' };
+    
+    let stored = sessionStorage.getItem('padont-user');
+    if (stored) {
+      return JSON.parse(stored);
+    }
+    
+    const newUser = {
+      name: getRandomName(),
+      color: getRandomColor(),
+    };
+    sessionStorage.setItem('padont-user', JSON.stringify(newUser));
+    return newUser;
+  }, []);
+
+  // Yjs document and PartyKit provider
+  const { ydoc, provider } = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return { ydoc: null, provider: null };
+    }
+
+    const doc = new Y.Doc();
+    const yProvider = new YPartyKitProvider(PARTYKIT_HOST, roomName, doc, {
+      connect: true,
+    });
+
+    return { ydoc: doc, provider: yProvider };
+  }, [roomName]);
+
+  // Track connection status
+  useEffect(() => {
+    if (!provider) return;
+
+    const handleStatus = ({ status }) => {
+      setIsConnected(status === 'connected');
+    };
+
+    provider.on('status', handleStatus);
+    
+    // Set initial awareness
+    provider.awareness.setLocalStateField('user', user);
+
+    return () => {
+      provider.off('status', handleStatus);
+    };
+  }, [provider, user]);
+
+  // Track collaborators from awareness
+  useEffect(() => {
+    if (!provider) return;
+
+    const updateCollaborators = () => {
+      const states = Array.from(provider.awareness.getStates().values());
+      const users = states
+        .filter(state => state.user)
+        .map(state => state.user);
+      setCollaborators(users);
+    };
+
+    provider.awareness.on('change', updateCollaborators);
+    updateCollaborators();
+
+    return () => {
+      provider.awareness.off('change', updateCollaborators);
+    };
+  }, [provider]);
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (provider) {
+        provider.disconnect();
+        provider.destroy();
+      }
+      if (ydoc) {
+        ydoc.destroy();
+      }
+    };
+  }, [provider, ydoc]);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
         codeBlock: false,
+        history: false, // Yjs handles history
       }),
       Placeholder.configure({
         placeholder,
@@ -129,32 +248,37 @@ const Editor = ({ value, onChange, placeholder = 'Start writing...' }) => {
       CodeBlockLowlight.configure({
         lowlight,
       }),
+      ...(ydoc && provider ? [
+        Collaboration.configure({
+          document: ydoc,
+        }),
+        CollaborationCursor.configure({
+          provider: provider,
+          user: user,
+        }),
+      ] : []),
     ],
-    content: value || '',
-    onUpdate: ({ editor }) => {
-      if (onChange) {
-        onChange(editor.getHTML());
-      }
-    },
     editorProps: {
       attributes: {
         spellcheck: 'false',
       },
     },
-  });
-
-  // Update editor content when value changes from outside
-  useEffect(() => {
-    if (editor && value && !editor.isFocused) {
-      const currentContent = editor.getHTML();
-      if (value !== currentContent) {
-        editor.commands.setContent(value, false);
+    onUpdate: ({ editor }) => {
+      if (onChange) {
+        onChange(editor.getHTML());
       }
-    }
-  }, [editor, value]);
+    },
+  }, [ydoc, provider, user]);
 
   if (!editor) {
-    return null;
+    return (
+      <EditorContainer>
+        <Toolbar>
+          <span style={{ padding: '8px', color: '#666' }}>Loading editor...</span>
+        </Toolbar>
+        <EditorContent />
+      </EditorContainer>
+    );
   }
 
   const addTable = () => {
@@ -262,6 +386,47 @@ const Editor = ({ value, onChange, placeholder = 'Start writing...' }) => {
         >
           {icons.hr}
         </ToolbarButton>
+
+        {/* Collaborators indicator */}
+        {collaborators.length > 0 && (
+          <>
+            <ToolbarDivider />
+            <CollaboratorsBar>
+              {collaborators.slice(0, 5).map((collab, i) => (
+                <CollaboratorBadge
+                  key={i}
+                  $color={collab.color}
+                  title={collab.name}
+                >
+                  {collab.name.charAt(0)}
+                </CollaboratorBadge>
+              ))}
+              {collaborators.length > 5 && (
+                <CollaboratorBadge $color="#666">
+                  +{collaborators.length - 5}
+                </CollaboratorBadge>
+              )}
+            </CollaboratorsBar>
+          </>
+        )}
+
+        {/* Connection status */}
+        <div style={{ 
+          marginLeft: 'auto', 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '6px',
+          fontSize: '0.6875rem',
+          color: isConnected ? '#4ade80' : '#666',
+        }}>
+          <span style={{
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            background: isConnected ? '#4ade80' : '#666',
+          }} />
+          {isConnected ? 'Live' : 'Connecting...'}
+        </div>
       </Toolbar>
 
       <EditorContent>

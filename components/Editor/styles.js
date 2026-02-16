@@ -53,6 +53,31 @@ export const ToolbarButton = styled.button`
   }
 `;
 
+export const CollaboratorsBar = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 4px;
+`;
+
+export const CollaboratorBadge = styled.div`
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: ${props => props.$color || colors.gray_600};
+  color: ${colors.black};
+  font-size: 0.6875rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid ${colors.black};
+  margin-left: -6px;
+  
+  &:first-child {
+    margin-left: 0;
+  }
+`;
+
 export const EditorContent = styled.div`
   flex: 1;
   padding: 32px;
@@ -261,6 +286,32 @@ export const EditorContent = styled.div`
 
     tr:hover td {
       background: ${colors.gray_900};
+    }
+
+    /* Collaboration cursors */
+    .collaboration-cursor__caret {
+      position: relative;
+      margin-left: -1px;
+      margin-right: -1px;
+      border-left: 2px solid;
+      border-color: inherit;
+      word-break: normal;
+      pointer-events: none;
+    }
+
+    .collaboration-cursor__label {
+      position: absolute;
+      top: -1.4em;
+      left: -1px;
+      font-size: 0.625rem;
+      font-weight: 600;
+      line-height: 1;
+      white-space: nowrap;
+      color: ${colors.black};
+      padding: 2px 6px;
+      border-radius: 3px 3px 3px 0;
+      user-select: none;
+      pointer-events: none;
     }
 
     /* Task lists */
