@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useEditor, EditorContent as TiptapContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -54,54 +54,65 @@ const icons = {
   hr: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="2" y1="12" x2="22" y2="12" /></svg>,
 };
 
-const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', collabUrl }) => {
-  const [connectionStatus, setConnectionStatus] = useState('connecting');
+// Custom hook to create provider synchronously
+function useCollabProvider(collabUrl, roomName, ydoc, user) {
+  const [provider, setProvider] = useState(null);
+  const [status, setStatus] = useState('connecting');
   const [users, setUsers] = useState([]);
-  const providerRef = useRef(null);
-  
-  // Stable refs - created once per component instance
-  const user = useMemo(() => ({ name: getRandomName(), color: getRandomColor() }), []);
-  const ydoc = useMemo(() => new Y.Doc(), []);
 
-  // Setup WebSocket provider
   useEffect(() => {
-    if (!collabUrl || !roomName || providerRef.current) return;
-    
+    if (!collabUrl || !roomName) {
+      setStatus('disconnected');
+      return;
+    }
+
     const wsUrl = collabUrl.replace(/^http/, 'ws') + '/collab';
     console.log('[Collab] Connecting:', wsUrl, roomName);
-    
-    const provider = new WebsocketProvider(wsUrl, roomName, ydoc, {
+
+    const wsProvider = new WebsocketProvider(wsUrl, roomName, ydoc, {
       connect: true,
       maxBackoffTime: 5000,
     });
-    providerRef.current = provider;
-    
-    provider.on('status', ({ status }) => {
-      console.log('[Collab] Status:', status);
-      setConnectionStatus(status);
+
+    wsProvider.on('status', ({ status: s }) => {
+      console.log('[Collab] Status:', s);
+      setStatus(s);
     });
-    
-    provider.awareness.setLocalStateField('user', user);
-    
+
+    wsProvider.awareness.setLocalStateField('user', user);
+
     const updateUsers = () => {
-      const states = provider.awareness.getStates();
+      const states = wsProvider.awareness.getStates();
       const list = [];
       states.forEach((state, clientId) => {
         if (state.user && clientId !== ydoc.clientID) list.push(state.user);
       });
       setUsers(list);
     };
-    provider.awareness.on('change', updateUsers);
-    
-    return () => {
-      provider.awareness.off('change', updateUsers);
-      provider.disconnect();
-      provider.destroy();
-      providerRef.current = null;
-    };
-  }, [collabUrl, roomName]); // Removed ydoc and user - they're stable refs
+    wsProvider.awareness.on('change', updateUsers);
 
-  // Create editor with Yjs - no waiting for connection
+    setProvider(wsProvider);
+
+    return () => {
+      wsProvider.awareness.off('change', updateUsers);
+      wsProvider.disconnect();
+      wsProvider.destroy();
+      setProvider(null);
+    };
+  }, [collabUrl, roomName, ydoc, user]);
+
+  return { provider, status, users };
+}
+
+const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', collabUrl }) => {
+  // Stable refs
+  const user = useMemo(() => ({ name: getRandomName(), color: getRandomColor() }), []);
+  const ydoc = useMemo(() => new Y.Doc(), []);
+
+  // Provider hook
+  const { provider, status, users } = useCollabProvider(collabUrl, roomName, ydoc, user);
+
+  // Create editor - recreate when provider becomes available
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ codeBlock: false, history: false }),
@@ -112,10 +123,9 @@ const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', colla
       TableCell,
       CodeBlockLowlight.configure({ lowlight }),
       Collaboration.configure({ document: ydoc }),
-      // Add cursor extension only when provider exists
-      ...(providerRef.current ? [
+      ...(provider ? [
         CollaborationCursor.configure({
-          provider: providerRef.current,
+          provider,
           user,
           render: (u) => {
             const cursor = document.createElement('span');
@@ -132,7 +142,7 @@ const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', colla
       ] : []),
     ],
     editorProps: { attributes: { spellcheck: 'false' } },
-  }, [ydoc]);
+  }, [ydoc, provider]); // Recreate when provider changes
 
   if (!editor) {
     return (
@@ -168,8 +178,8 @@ const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', colla
         <div style={{ flex: 1 }} />
         
         <CollabStatus>
-          <CollabDot $status={connectionStatus} />
-          <span>{statusText[connectionStatus]}</span>
+          <CollabDot $status={status} />
+          <span>{statusText[status]}</span>
         </CollabStatus>
         
         {users.length > 0 && (
