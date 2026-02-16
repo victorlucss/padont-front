@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useEditor, EditorContent as TiptapContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -54,8 +54,54 @@ const icons = {
   hr: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="2" y1="12" x2="22" y2="12" /></svg>,
 };
 
-// Inner editor component that only mounts when provider is ready
-const EditorWithProvider = ({ ydoc, provider, user, placeholder }) => {
+const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', collabUrl }) => {
+  const [connectionStatus, setConnectionStatus] = useState('connecting');
+  const [users, setUsers] = useState([]);
+  const providerRef = useRef(null);
+  
+  // Stable refs - created once per component instance
+  const user = useMemo(() => ({ name: getRandomName(), color: getRandomColor() }), []);
+  const ydoc = useMemo(() => new Y.Doc(), []);
+
+  // Setup WebSocket provider
+  useEffect(() => {
+    if (!collabUrl || !roomName || providerRef.current) return;
+    
+    const wsUrl = collabUrl.replace(/^http/, 'ws') + '/collab';
+    console.log('[Collab] Connecting:', wsUrl, roomName);
+    
+    const provider = new WebsocketProvider(wsUrl, roomName, ydoc, {
+      connect: true,
+      maxBackoffTime: 5000,
+    });
+    providerRef.current = provider;
+    
+    provider.on('status', ({ status }) => {
+      console.log('[Collab] Status:', status);
+      setConnectionStatus(status);
+    });
+    
+    provider.awareness.setLocalStateField('user', user);
+    
+    const updateUsers = () => {
+      const states = provider.awareness.getStates();
+      const list = [];
+      states.forEach((state, clientId) => {
+        if (state.user && clientId !== ydoc.clientID) list.push(state.user);
+      });
+      setUsers(list);
+    };
+    provider.awareness.on('change', updateUsers);
+    
+    return () => {
+      provider.awareness.off('change', updateUsers);
+      provider.disconnect();
+      provider.destroy();
+      providerRef.current = null;
+    };
+  }, [collabUrl, roomName]); // Removed ydoc and user - they're stable refs
+
+  // Create editor with Yjs - no waiting for connection
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ codeBlock: false, history: false }),
@@ -66,34 +112,41 @@ const EditorWithProvider = ({ ydoc, provider, user, placeholder }) => {
       TableCell,
       CodeBlockLowlight.configure({ lowlight }),
       Collaboration.configure({ document: ydoc }),
-      CollaborationCursor.configure({
-        provider,
-        user,
-        render: (cursorUser) => {
-          const cursor = document.createElement('span');
-          cursor.classList.add('collaboration-cursor__caret');
-          cursor.style.borderColor = cursorUser.color;
-          
-          const label = document.createElement('div');
-          label.classList.add('collaboration-cursor__label');
-          label.style.backgroundColor = cursorUser.color;
-          label.style.color = '#000';
-          label.textContent = cursorUser.name;
-          cursor.appendChild(label);
-          
-          return cursor;
-        },
-      }),
+      // Add cursor extension only when provider exists
+      ...(providerRef.current ? [
+        CollaborationCursor.configure({
+          provider: providerRef.current,
+          user,
+          render: (u) => {
+            const cursor = document.createElement('span');
+            cursor.classList.add('collaboration-cursor__caret');
+            cursor.style.borderColor = u.color;
+            const label = document.createElement('div');
+            label.classList.add('collaboration-cursor__label');
+            label.style.backgroundColor = u.color;
+            label.textContent = u.name;
+            cursor.appendChild(label);
+            return cursor;
+          },
+        }),
+      ] : []),
     ],
     editorProps: { attributes: { spellcheck: 'false' } },
-  });
+  }, [ydoc]);
 
-  if (!editor) return <div style={{ padding: '24px', color: '#666' }}>Loading editor...</div>;
+  if (!editor) {
+    return (
+      <EditorContainer>
+        <div style={{ padding: 24, color: '#666' }}>Loading...</div>
+      </EditorContainer>
+    );
+  }
 
   const addTable = () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+  const statusText = { connecting: 'Connecting...', connected: 'Live', disconnected: 'Offline' };
 
   return (
-    <>
+    <EditorContainer>
       <Toolbar>
         <ToolbarButton onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} $active={editor.isActive('heading', { level: 1 })} title="H1">{icons.h1}</ToolbarButton>
         <ToolbarButton onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} $active={editor.isActive('heading', { level: 2 })} title="H2">{icons.h2}</ToolbarButton>
@@ -104,110 +157,34 @@ const EditorWithProvider = ({ ydoc, provider, user, placeholder }) => {
         <ToolbarButton onClick={() => editor.chain().focus().toggleStrike().run()} $active={editor.isActive('strike')} title="Strike">{icons.strike}</ToolbarButton>
         <ToolbarButton onClick={() => editor.chain().focus().toggleCode().run()} $active={editor.isActive('code')} title="Code">{icons.code}</ToolbarButton>
         <ToolbarDivider />
-        <ToolbarButton onClick={() => editor.chain().focus().toggleBulletList().run()} $active={editor.isActive('bulletList')} title="Bullet List">{icons.bulletList}</ToolbarButton>
-        <ToolbarButton onClick={() => editor.chain().focus().toggleOrderedList().run()} $active={editor.isActive('orderedList')} title="Ordered List">{icons.orderedList}</ToolbarButton>
+        <ToolbarButton onClick={() => editor.chain().focus().toggleBulletList().run()} $active={editor.isActive('bulletList')} title="Bullets">{icons.bulletList}</ToolbarButton>
+        <ToolbarButton onClick={() => editor.chain().focus().toggleOrderedList().run()} $active={editor.isActive('orderedList')} title="Numbers">{icons.orderedList}</ToolbarButton>
         <ToolbarDivider />
         <ToolbarButton onClick={() => editor.chain().focus().toggleCodeBlock().run()} $active={editor.isActive('codeBlock')} title="Code Block">{icons.codeBlock}</ToolbarButton>
         <ToolbarButton onClick={() => editor.chain().focus().toggleBlockquote().run()} $active={editor.isActive('blockquote')} title="Quote">{icons.quote}</ToolbarButton>
         <ToolbarButton onClick={addTable} title="Table">{icons.table}</ToolbarButton>
         <ToolbarButton onClick={() => editor.chain().focus().setHorizontalRule().run()} title="HR">{icons.hr}</ToolbarButton>
+        
+        <div style={{ flex: 1 }} />
+        
+        <CollabStatus>
+          <CollabDot $status={connectionStatus} />
+          <span>{statusText[connectionStatus]}</span>
+        </CollabStatus>
+        
+        {users.length > 0 && (
+          <CollabUsers>
+            {users.slice(0, 3).map((u, i) => (
+              <UserBadge key={i} $color={u.color} title={u.name}>{u.name.charAt(0)}</UserBadge>
+            ))}
+            {users.length > 3 && <UserBadge $color="#666">+{users.length - 3}</UserBadge>}
+          </CollabUsers>
+        )}
       </Toolbar>
+      
       <EditorContent>
         <TiptapContent editor={editor} />
       </EditorContent>
-    </>
-  );
-};
-
-const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', collabUrl }) => {
-  const [connectionStatus, setConnectionStatus] = useState('connecting');
-  const [users, setUsers] = useState([]);
-  const [provider, setProvider] = useState(null);
-  const [isReady, setIsReady] = useState(false);
-  
-  // New random identity for each session (no persistence)
-  const user = useMemo(() => ({
-    name: getRandomName(),
-    color: getRandomColor(),
-  }), []);
-
-  const ydoc = useMemo(() => new Y.Doc(), []);
-
-  useEffect(() => {
-    if (!collabUrl || !roomName) {
-      setConnectionStatus('disconnected');
-      return;
-    }
-    
-    const wsUrl = collabUrl.replace(/^http/, 'ws') + '/collab';
-    console.log('[Collab] Connecting:', wsUrl, roomName);
-    
-    const wsProvider = new WebsocketProvider(wsUrl, roomName, ydoc);
-    
-    wsProvider.on('status', ({ status }) => {
-      console.log('[Collab] Status:', status);
-      setConnectionStatus(status);
-    });
-    
-    wsProvider.on('sync', (synced) => {
-      console.log('[Collab] Synced:', synced);
-      if (synced) setIsReady(true);
-    });
-    
-    wsProvider.awareness.setLocalStateField('user', user);
-    
-    const updateUsers = () => {
-      const states = wsProvider.awareness.getStates();
-      const list = [];
-      states.forEach((state, clientId) => {
-        if (state.user && clientId !== ydoc.clientID) list.push(state.user);
-      });
-      setUsers(list);
-    };
-    wsProvider.awareness.on('change', updateUsers);
-    
-    setProvider(wsProvider);
-    
-    return () => {
-      wsProvider.awareness.off('change', updateUsers);
-      wsProvider.destroy();
-      setProvider(null);
-      setIsReady(false);
-    };
-  }, [collabUrl, roomName, ydoc, user]);
-
-  const statusText = { connecting: 'Connecting...', connected: 'Live', disconnected: 'Offline' };
-
-  return (
-    <EditorContainer>
-      {isReady && provider ? (
-        <EditorWithProvider ydoc={ydoc} provider={provider} user={user} placeholder={placeholder} />
-      ) : (
-        <Toolbar>
-          <div style={{ flex: 1 }} />
-          <CollabStatus>
-            <CollabDot $status={connectionStatus} />
-            <span>{statusText[connectionStatus]}</span>
-          </CollabStatus>
-        </Toolbar>
-      )}
-      
-      {isReady && (
-        <div style={{ position: 'absolute', top: 8, right: 12, display: 'flex', alignItems: 'center', gap: 8, zIndex: 10 }}>
-          <CollabStatus>
-            <CollabDot $status={connectionStatus} />
-            <span>{statusText[connectionStatus]}</span>
-          </CollabStatus>
-          {users.length > 0 && (
-            <CollabUsers>
-              {users.slice(0, 3).map((u, i) => (
-                <UserBadge key={i} $color={u.color} title={u.name}>{u.name.charAt(0)}</UserBadge>
-              ))}
-              {users.length > 3 && <UserBadge $color="#666">+{users.length - 3}</UserBadge>}
-            </CollabUsers>
-          )}
-        </div>
-      )}
     </EditorContainer>
   );
 };
