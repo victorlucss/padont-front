@@ -17,19 +17,7 @@ const port = parseInt(process.env.PORT, 10) || 3000;
 
 // Track documents that need saving (debounce)
 const pendingSaves = new Map();
-const SAVE_DELAY = 2000; // Save 2 seconds after last change
-
-/**
- * Load document from SQLite if exists
- */
-function loadDocFromDB(docName) {
-  const state = getDocument(docName);
-  if (state) {
-    console.log(`[DB] Loaded document: ${docName} (${state.length} bytes)`);
-    return state;
-  }
-  return null;
-}
+const SAVE_DELAY = 2000;
 
 /**
  * Schedule a save for a document (debounced)
@@ -44,38 +32,34 @@ function scheduleSave(docName) {
     if (doc) {
       const state = Y.encodeStateAsUpdate(doc);
       saveDocument(docName, state);
-      console.log(`[DB] Saved document: ${docName} (${state.length} bytes)`);
+      console.log(`[DB] Saved: ${docName} (${state.length} bytes)`);
     }
     pendingSaves.delete(docName);
   }, SAVE_DELAY));
 }
 
 /**
- * Get or create a Yjs document with persistence
+ * Initialize document with saved state from DB
  */
-function getYDoc(docName) {
-  let doc = docs.get(docName);
+function initDocFromDB(docName) {
+  const doc = docs.get(docName);
+  if (!doc) return;
   
-  if (!doc) {
-    doc = new Y.Doc();
-    doc.gc = true;
-    
-    // Load from database if exists
-    const savedState = loadDocFromDB(docName);
+  // Check if doc is empty (new)
+  const state = Y.encodeStateAsUpdate(doc);
+  if (state.length <= 2) { // Empty doc is ~2 bytes
+    const savedState = getDocument(docName);
     if (savedState) {
       Y.applyUpdate(doc, savedState);
+      console.log(`[DB] Restored: ${docName} (${savedState.length} bytes)`);
     }
-    
-    // Listen for updates to schedule saves
-    doc.on('update', () => {
-      scheduleSave(docName);
-    });
-    
-    docs.set(docName, doc);
-    console.log(`[Collab] Created document: ${docName}${savedState ? ' (restored from DB)' : ''}`);
   }
   
-  return doc;
+  // Setup save on update (only once per doc)
+  if (!doc._persistenceInitialized) {
+    doc._persistenceInitialized = true;
+    doc.on('update', () => scheduleSave(docName));
+  }
 }
 
 const app = next({ dev, hostname, port });
@@ -118,13 +102,11 @@ app.prepare().then(() => {
   wss.on('connection', (ws, req, docName) => {
     console.log(`[Collab] Client connected to: ${docName}`);
     
-    // Ensure document is loaded from DB before connection
-    getYDoc(docName);
+    // Let y-websocket handle the connection
+    setupWSConnection(ws, req, { docName, gc: true });
     
-    setupWSConnection(ws, req, {
-      docName,
-      gc: true,
-    });
+    // After setup, initialize persistence
+    setTimeout(() => initDocFromDB(docName), 100);
     
     ws.on('close', () => {
       console.log(`[Collab] Client disconnected from: ${docName}`);
@@ -154,17 +136,14 @@ app.prepare().then(() => {
     }
   });
 
-  // Graceful shutdown - save all pending documents
+  // Graceful shutdown
   const shutdown = () => {
     console.log('\n[Server] Shutting down...');
-    
-    // Save all documents
     docs.forEach((doc, docName) => {
       const state = Y.encodeStateAsUpdate(doc);
       saveDocument(docName, state);
       console.log(`[DB] Final save: ${docName}`);
     });
-    
     process.exit(0);
   };
   
