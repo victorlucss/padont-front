@@ -1,169 +1,317 @@
 import styled from 'styled-components';
 import { colors } from 'styles';
 
-export const EditorToolbar = styled.div`
+export const EditorContainer = styled.div`
+  flex: 1;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px;
-  background: #1a1a1a;
-  border: 1px solid #444;
-  border-bottom: none;
-  border-radius: 4px 4px 0 0;
+  flex-direction: column;
+  background: ${colors.black};
+  overflow: hidden;
+`;
+
+export const Toolbar = styled.div`
+  display: flex;
   align-items: center;
+  gap: 4px;
+  padding: 12px 24px;
+  background: ${colors.gray_900};
+  border-bottom: 1px solid ${colors.gray_800};
+  flex-wrap: wrap;
+`;
 
-  button {
-    background: #2a2a2a;
-    color: #fff;
-    border: 1px solid #444;
-    padding: 6px 10px;
-    border-radius: 3px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-    transition: all 0.2s ease;
+export const ToolbarDivider = styled.div`
+  width: 1px;
+  height: 24px;
+  background: ${colors.gray_700};
+  margin: 0 8px;
+`;
 
-    &:hover {
-      background: #333;
-      border-color: #555;
-    }
+export const ToolbarButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: ${props => props.$active ? colors.accent : colors.gray_400};
+  background: ${props => props.$active ? colors.accent_glow : 'transparent'};
+  border: 1px solid ${props => props.$active ? colors.accent : 'transparent'};
+  transition: all 0.15s;
 
-    &.active {
-      background: #0066cc;
-      border-color: #0066cc;
-      color: #fff;
-    }
-
-    &:focus {
-      outline: none;
-      box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.3);
-    }
+  &:hover {
+    color: ${colors.white};
+    background: ${colors.gray_800};
+    border-color: ${colors.gray_700};
   }
 
-  .separator {
-    width: 1px;
-    height: 20px;
-    background: #444;
-    margin: 0 4px;
+  &:active {
+    transform: scale(0.95);
+  }
+
+  svg {
+    width: 16px;
+    height: 16px;
   }
 `;
 
-export const EditorContentStyled = styled.div`
+export const EditorContent = styled.div`
+  flex: 1;
+  padding: 32px;
+  overflow-y: auto;
+  
   .ProseMirror {
+    min-height: 100%;
     outline: none;
-    padding: 16px;
-    min-height: 400px;
-    background: #1a1a1a;
-    border: 1px solid #444;
-    border-top: none;
-    border-radius: 0 0 4px 4px;
-    color: #d4d4d4;
-    font-family: 'Courier Prime', monospace;
-    line-height: 1.5;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9375rem;
+    line-height: 1.75;
+    color: ${colors.white};
+
+    > * + * {
+      margin-top: 0.75em;
+    }
+
+    /* Placeholder */
+    p.is-editor-empty:first-child::before {
+      content: attr(data-placeholder);
+      float: left;
+      color: ${colors.gray_600};
+      pointer-events: none;
+      height: 0;
+    }
+
+    /* Headings */
+    h1, h2, h3 {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-weight: 400;
+      line-height: 1.2;
+      color: ${colors.white};
+    }
 
     h1 {
-      font-size: 2em;
-      font-weight: bold;
-      margin: 0.5em 0;
+      font-size: 2.5rem;
+      margin-top: 1.5em;
+      letter-spacing: -0.02em;
     }
 
     h2 {
-      font-size: 1.5em;
-      font-weight: bold;
-      margin: 0.5em 0;
+      font-size: 1.75rem;
+      margin-top: 1.25em;
     }
 
     h3 {
-      font-size: 1.2em;
-      font-weight: bold;
-      margin: 0.5em 0;
+      font-size: 1.25rem;
+      margin-top: 1em;
     }
 
-    p {
-      margin: 0.5em 0;
-    }
-
-    code {
-      background: #2a2a2a;
-      color: #4ec9b0;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-size: 0.9em;
-    }
-
-    pre {
-      background: #1e1e1e;
-      border: 1px solid #444;
-      border-radius: 4px;
-      padding: 12px;
-      overflow-x: auto;
-      margin: 1em 0;
-
-      code {
-        background: transparent;
-        color: #d4d4d4;
-        padding: 0;
-      }
-    }
-
+    /* Inline formatting */
     strong {
-      font-weight: bold;
+      font-weight: 600;
+      color: ${colors.white};
     }
 
     em {
       font-style: italic;
     }
 
-    del {
+    s {
       text-decoration: line-through;
-      opacity: 0.6;
+      color: ${colors.gray_500};
     }
 
-    ul, ol {
-      margin-left: 20px;
-      margin: 0.5em 0;
+    code {
+      font-family: inherit;
+      background: ${colors.gray_800};
+      color: ${colors.accent};
+      padding: 0.2em 0.4em;
+      border-radius: 0;
+    }
 
-      li {
-        margin: 0.25em 0;
+    /* Links */
+    a {
+      color: ${colors.accent};
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      
+      &:hover {
+        color: ${colors.white};
       }
     }
 
+    /* Lists */
+    ul, ol {
+      padding-left: 1.5em;
+    }
+
+    ul {
+      list-style-type: none;
+      
+      li::before {
+        content: '—';
+        color: ${colors.accent};
+        display: inline-block;
+        width: 1.5em;
+        margin-left: -1.5em;
+      }
+    }
+
+    ol {
+      list-style-type: decimal;
+      
+      li::marker {
+        color: ${colors.accent};
+      }
+    }
+
+    li {
+      margin-top: 0.25em;
+    }
+
+    /* Blockquote */
     blockquote {
-      border-left: 4px solid #0066cc;
-      padding-left: 12px;
-      margin: 1em 0;
-      opacity: 0.8;
+      border-left: 2px solid ${colors.accent};
+      padding-left: 1.5em;
+      margin-left: 0;
+      color: ${colors.gray_300};
       font-style: italic;
     }
 
+    /* Code blocks */
+    pre {
+      background: ${colors.gray_900};
+      border: 1px solid ${colors.gray_800};
+      padding: 1em 1.25em;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.875rem;
+      line-height: 1.6;
+
+      code {
+        background: none;
+        padding: 0;
+        color: ${colors.gray_200};
+      }
+
+      /* Syntax highlighting */
+      .hljs-keyword,
+      .hljs-selector-tag,
+      .hljs-built_in {
+        color: ${colors.accent};
+      }
+
+      .hljs-string,
+      .hljs-attr {
+        color: #a8e6cf;
+      }
+
+      .hljs-number,
+      .hljs-literal {
+        color: #ffb4a2;
+      }
+
+      .hljs-comment {
+        color: ${colors.gray_500};
+        font-style: italic;
+      }
+
+      .hljs-function,
+      .hljs-title {
+        color: #ffd3b6;
+      }
+
+      .hljs-variable,
+      .hljs-template-variable {
+        color: #dcedc1;
+      }
+    }
+
+    /* Horizontal rule */
+    hr {
+      border: none;
+      border-top: 1px solid ${colors.gray_700};
+      margin: 2em 0;
+    }
+
+    /* Tables */
     table {
       border-collapse: collapse;
       width: 100%;
       margin: 1em 0;
-
-      th, td {
-        border: 1px solid #444;
-        padding: 8px 12px;
-        text-align: left;
-      }
-
-      th {
-        background: #2a2a2a;
-        font-weight: bold;
-      }
-
-      tr:nth-child(even) {
-        background: #1e1e1e;
-      }
     }
 
-    a {
-      color: #4a9eff;
-      text-decoration: none;
-      border-bottom: 1px dashed #4a9eff;
+    th, td {
+      border: 1px solid ${colors.gray_700};
+      padding: 0.75em 1em;
+      text-align: left;
+    }
 
-      &:hover {
-        color: #6bb3ff;
+    th {
+      background: ${colors.gray_900};
+      font-weight: 600;
+      color: ${colors.accent};
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+
+    td {
+      background: ${colors.black};
+    }
+
+    tr:hover td {
+      background: ${colors.gray_900};
+    }
+
+    /* Task lists */
+    ul[data-type="taskList"] {
+      list-style: none;
+      padding-left: 0;
+
+      li {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5em;
+
+        &::before {
+          display: none;
+        }
+
+        > label {
+          flex-shrink: 0;
+          margin-top: 0.25em;
+
+          input[type="checkbox"] {
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border: 1px solid ${colors.gray_600};
+            background: ${colors.black};
+            cursor: pointer;
+            position: relative;
+
+            &:checked {
+              background: ${colors.accent};
+              border-color: ${colors.accent};
+
+              &::after {
+                content: '✓';
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                font-size: 10px;
+                color: ${colors.black};
+              }
+            }
+
+            &:hover {
+              border-color: ${colors.accent};
+            }
+          }
+        }
+
+        > div {
+          flex: 1;
+        }
       }
     }
   }

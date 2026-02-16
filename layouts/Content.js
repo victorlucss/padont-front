@@ -1,146 +1,174 @@
-// Adapted from https://github.com/danscan/react-every-layout/blob/master/src/layouts/Content.tsx
 import PropTypes from 'prop-types';
 import styled from 'styled-components';
-
-import { colors } from 'styles'
+import { colors } from 'styles';
 
 const ContentPropTypes = {
-  gutters: PropTypes.string,
   max: PropTypes.string,
-}
+  height: PropTypes.string,
+  padding: PropTypes.string,
+};
 
 const ContentDefaultProps = {
   max: '100%',
   height: 'auto',
-  direction: '',
-  items: '',
-  justify: '',
-  padding: '20px'
+  padding: '24px',
 };
 
 const Content = styled.div`
-  flex-direction: ${(props) => props.direction};
-  align-items: ${(props) => props.items};
-  justify-content: ${(props) => props.justify};
-
   margin-left: auto;
   margin-right: auto;
-
   width: 100%;
   box-sizing: border-box;
-
   max-width: ${(props) => props.max};
   height: ${(props) => props.height};
   padding: ${(props) => props.padding};
 
-  h1, h2, h3 {
-    font-weight: bold;
-    margin: .5em 0;
+  /* Typography */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-weight: 400;
+    color: ${colors.white};
+    margin: 1.5em 0 0.75em;
+    line-height: 1.3;
 
     &:first-child {
       margin-top: 0;
     }
   }
-  
-  h1 {
-    font-size: 2rem;
-  }
 
-  h2 {
-    font-size: 1.5rem;
-  }
-
-  h3 {
-    font-size: 1.2rem;
-  }
+  h1 { font-size: 2.5rem; letter-spacing: -0.02em; }
+  h2 { font-size: 1.75rem; }
+  h3 { font-size: 1.25rem; }
+  h4 { font-size: 1rem; }
 
   strong, b {
-    font-weight: bold;
+    font-weight: 600;
+    color: ${colors.white};
   }
 
   em, i {
     font-style: italic;
   }
 
-  blockquote {
-    background: ${colors.dark_blue};
-    border-left: 10px solid ${colors.blue};
-    margin: 1.5em 0;
-    padding: 0.5em 10px;
+  /* Links */
+  a, a:visited {
+    color: ${colors.accent};
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color 0.2s;
   }
 
+  a:hover {
+    color: ${colors.white};
+  }
+
+  /* Blockquote */
+  blockquote {
+    border-left: 2px solid ${colors.accent};
+    background: ${colors.gray_900};
+    margin: 1.5em 0;
+    padding: 1em 1.5em;
+    color: ${colors.gray_300};
+    font-style: italic;
+  }
+
+  /* Lists */
   ul, ol {
-    margin-left: 20px;
+    margin-left: 1.5em;
+    margin-bottom: 1em;
+  }
+
+  ul {
+    list-style: none;
+
+    li::before {
+      content: '—';
+      color: ${colors.accent};
+      display: inline-block;
+      width: 1.5em;
+      margin-left: -1.5em;
+    }
   }
 
   ol li {
     list-style-type: decimal;
+
+    &::marker {
+      color: ${colors.accent};
+    }
   }
 
-  ul li {
-    list-style-type: circle;
+  li {
+    margin-bottom: 0.25em;
   }
 
+  /* Code */
   code {
-    font-family: 'Courier Prime', monospace;
-    background: ${colors.dark_green};
-    color: ${colors.green};
-    padding: 0 .5em;
+    font-family: 'JetBrains Mono', monospace;
+    background: ${colors.gray_800};
+    color: ${colors.accent};
+    padding: 0.2em 0.4em;
   }
 
-  a, a:hover, a:visited {
-    color: ${colors.white};
-    text-decoration: none;
-    border-bottom: 1px dashed ${colors.almost_white};
+  pre {
+    background: ${colors.gray_900};
+    border: 1px solid ${colors.gray_800};
+    padding: 1em;
+    overflow-x: auto;
+    margin: 1.5em 0;
+
+    code {
+      background: none;
+      padding: 0;
+      color: ${colors.gray_200};
+    }
   }
 
-  img {
-    max-width: 400px;
-  }
-
-  /* Table styles for GFM tables */
+  /* Tables */
   table {
-    border-collapse: collapse;
     width: 100%;
-    margin: 1em 0;
+    border-collapse: collapse;
+    margin: 1.5em 0;
+    font-size: 0.875rem;
   }
 
   th, td {
-    border: 1px solid #444;
-    padding: 8px 12px;
+    border: 1px solid ${colors.gray_700};
+    padding: 0.75em 1em;
     text-align: left;
   }
 
   th {
-    background: #2a2a2a;
-    font-weight: bold;
+    background: ${colors.gray_900};
+    font-weight: 600;
+    color: ${colors.accent};
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
   }
 
-  /* Strikethrough text */
-  del {
-    opacity: 0.6;
+  tr:hover td {
+    background: ${colors.gray_900};
+  }
+
+  /* Strikethrough */
+  del, s {
     text-decoration: line-through;
+    color: ${colors.gray_500};
   }
 
-  /* Task list styles */
-  input[type="checkbox"] {
-    margin-right: 8px;
+  /* Images */
+  img {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid ${colors.gray_800};
   }
 
-  /* Syntax highlighting */
-  pre {
-    background: #1e1e1e;
-    border: 1px solid #444;
-    border-radius: 4px;
-    overflow-x: auto;
-    padding: 12px;
-    margin: 1em 0;
-  }
-
-  pre code {
-    background: transparent;
-    padding: 0;
-    color: #d4d4d4;
+  /* Horizontal rule */
+  hr {
+    border: none;
+    border-top: 1px solid ${colors.gray_700};
+    margin: 2em 0;
   }
 `;
 
