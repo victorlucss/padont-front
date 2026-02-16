@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useEditor, EditorContent as TiptapContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -7,11 +7,20 @@ import { TableRow } from '@tiptap/extension-table-row';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
-import Collaboration from '@tiptap/extension-collaboration';
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import { common, createLowlight } from 'lowlight';
-import * as Y from 'yjs';
-import { WebsocketProvider } from 'y-websocket';
+
+// Dynamic imports for collaboration (may fail if WebSocket not available)
+let Collaboration, CollaborationCursor, Y, WebsocketProvider;
+if (typeof window !== 'undefined') {
+  try {
+    Collaboration = require('@tiptap/extension-collaboration').default;
+    CollaborationCursor = require('@tiptap/extension-collaboration-cursor').default;
+    Y = require('yjs');
+    WebsocketProvider = require('y-websocket').WebsocketProvider;
+  } catch (e) {
+    console.warn('Collaboration extensions not available');
+  }
+}
 
 import {
   EditorContainer,
@@ -143,35 +152,55 @@ const icons = {
 
 const Editor = ({ value, onChange, placeholder = 'Start writing...', roomName = 'default' }) => {
   const [collaborators, setCollaborators] = useState([]);
+  const [collabEnabled, setCollabEnabled] = useState(false);
   
-  // Create Yjs document and WebSocket provider
+  // Check if collaboration is available
+  const collabAvailable = typeof window !== 'undefined' && 
+    Collaboration && CollaborationCursor && Y && WebsocketProvider &&
+    process.env.NEXT_PUBLIC_COLLAB_URL;
+  
+  // Create Yjs document and WebSocket provider (only if available)
   const { ydoc, provider, user } = useMemo(() => {
-    const doc = new Y.Doc();
-    const userColor = getRandomColor();
-    const userName = getRandomName();
+    if (!collabAvailable) {
+      return { ydoc: null, provider: null, user: null };
+    }
     
-    // WebSocket URL - use environment variable or default
-    const wsUrl = typeof window !== 'undefined' 
-      ? (process.env.NEXT_PUBLIC_COLLAB_URL || `ws://${window.location.hostname}:1234`)
-      : 'ws://localhost:1234';
-    
-    const wsProvider = new WebsocketProvider(wsUrl, roomName, doc);
-    
-    // Set user awareness
-    wsProvider.awareness.setLocalStateField('user', {
-      name: userName,
-      color: userColor,
-    });
-    
-    return {
-      ydoc: doc,
-      provider: wsProvider,
-      user: { name: userName, color: userColor },
-    };
-  }, [roomName]);
+    try {
+      const doc = new Y.Doc();
+      const userColor = getRandomColor();
+      const userName = getRandomName();
+      
+      // WebSocket URL - must be WSS for HTTPS sites
+      const wsUrl = process.env.NEXT_PUBLIC_COLLAB_URL;
+      
+      const wsProvider = new WebsocketProvider(wsUrl, roomName, doc);
+      
+      // Set user awareness
+      wsProvider.awareness.setLocalStateField('user', {
+        name: userName,
+        color: userColor,
+      });
+      
+      // Track connection status
+      wsProvider.on('status', (event) => {
+        setCollabEnabled(event.status === 'connected');
+      });
+      
+      return {
+        ydoc: doc,
+        provider: wsProvider,
+        user: { name: userName, color: userColor },
+      };
+    } catch (e) {
+      console.warn('Failed to initialize collaboration:', e);
+      return { ydoc: null, provider: null, user: null };
+    }
+  }, [roomName, collabAvailable]);
 
   // Track collaborators
   useEffect(() => {
+    if (!provider) return;
+    
     const updateCollaborators = () => {
       const states = Array.from(provider.awareness.getStates().values());
       const users = states
@@ -191,16 +220,17 @@ const Editor = ({ value, onChange, placeholder = 'Start writing...', roomName = 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      provider.destroy();
-      ydoc.destroy();
+      if (provider) provider.destroy();
+      if (ydoc) ydoc.destroy();
     };
   }, [provider, ydoc]);
 
-  const editor = useEditor({
-    extensions: [
+  // Build extensions list
+  const extensions = useMemo(() => {
+    const exts = [
       StarterKit.configure({
         codeBlock: false,
-        history: false, // Disable default history, Yjs handles this
+        history: collabEnabled ? false : true, // Disable history only when collab is active
       }),
       Placeholder.configure({
         placeholder,
@@ -214,14 +244,27 @@ const Editor = ({ value, onChange, placeholder = 'Start writing...', roomName = 
       CodeBlockLowlight.configure({
         lowlight,
       }),
-      Collaboration.configure({
-        document: ydoc,
-      }),
-      CollaborationCursor.configure({
-        provider,
-        user: user,
-      }),
-    ],
+    ];
+    
+    // Add collaboration extensions only if available and connected
+    if (collabEnabled && ydoc && provider && user && Collaboration && CollaborationCursor) {
+      exts.push(
+        Collaboration.configure({
+          document: ydoc,
+        }),
+        CollaborationCursor.configure({
+          provider,
+          user: user,
+        })
+      );
+    }
+    
+    return exts;
+  }, [placeholder, collabEnabled, ydoc, provider, user]);
+
+  const editor = useEditor({
+    extensions,
+    content: collabEnabled ? undefined : value, // Only set content when not collaborating
     editorProps: {
       attributes: {
         spellcheck: 'false',
@@ -232,7 +275,7 @@ const Editor = ({ value, onChange, placeholder = 'Start writing...', roomName = 
         onChange(editor.getHTML());
       }
     },
-  });
+  }, [extensions]);
 
   if (!editor) {
     return null;
