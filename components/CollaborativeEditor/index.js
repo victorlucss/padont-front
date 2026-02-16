@@ -8,10 +8,11 @@ import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Collaboration from '@tiptap/extension-collaboration';
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import { common, createLowlight } from 'lowlight';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
+import { yCursorPlugin } from 'y-prosemirror';
+import { Extension } from '@tiptap/core';
 
 import {
   EditorContainer,
@@ -36,6 +37,38 @@ const getRandomName = () => {
   const adjectives = ['Swift', 'Clever', 'Bold', 'Quiet', 'Bright', 'Wild', 'Cosmic', 'Lucky', 'Mystic', 'Noble'];
   const nouns = ['Fox', 'Owl', 'Bear', 'Wolf', 'Hawk', 'Tiger', 'Dragon', 'Phoenix', 'Raven', 'Lynx'];
   return `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`;
+};
+
+// Custom cursor extension using y-prosemirror directly
+const createCursorExtension = (provider, user) => {
+  return Extension.create({
+    name: 'collaborationCursor',
+    
+    addProseMirrorPlugins() {
+      const awareness = provider.awareness;
+      
+      // Set user info in awareness
+      awareness.setLocalStateField('user', user);
+      
+      return [
+        yCursorPlugin(awareness, {
+          cursorBuilder: (cursorUser) => {
+            const cursor = document.createElement('span');
+            cursor.classList.add('collaboration-cursor__caret');
+            cursor.style.borderColor = cursorUser.color;
+            
+            const label = document.createElement('div');
+            label.classList.add('collaboration-cursor__label');
+            label.style.backgroundColor = cursorUser.color;
+            label.textContent = cursorUser.name;
+            cursor.appendChild(label);
+            
+            return cursor;
+          },
+        }),
+      ];
+    },
+  });
 };
 
 const icons = {
@@ -99,7 +132,7 @@ function TiptapEditor({ collab, placeholder }) {
       TableCell,
       CodeBlockLowlight.configure({ lowlight }),
       Collaboration.configure({ document: ydoc }),
-      CollaborationCursor.configure({ provider, user }),
+      createCursorExtension(provider, user),
     ],
     editorProps: { attributes: { spellcheck: 'false' } },
   });
@@ -155,13 +188,11 @@ function TiptapEditor({ collab, placeholder }) {
 
 // Main component - handles provider lifecycle
 const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', collabUrl }) => {
-  // Single atomic state for all collab objects
   const [collab, setCollab] = useState(null);
 
   useEffect(() => {
     if (!collabUrl || !roomName) return;
 
-    // Create all objects at once
     const user = { name: getRandomName(), color: getRandomColor() };
     const ydoc = new Y.Doc();
     const wsUrl = collabUrl.replace(/^http/, 'ws') + '/collab';
@@ -175,12 +206,11 @@ const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', colla
 
     provider.awareness.setLocalStateField('user', user);
 
-    // Set state atomically - this ensures TiptapEditor only mounts with valid objects
     setCollab({ ydoc, provider, user });
 
     return () => {
       console.log('[Collab] Cleanup');
-      setCollab(null); // Clear state FIRST
+      setCollab(null);
       provider.disconnect();
       provider.destroy();
       ydoc.destroy();
