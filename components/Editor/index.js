@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect } from 'react';
 import { useEditor, EditorContent as TiptapContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -9,54 +9,15 @@ import { TableHeader } from '@tiptap/extension-table-header';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { common, createLowlight } from 'lowlight';
 
-// Dynamic imports for collaboration (may fail if WebSocket not available)
-let Collaboration, CollaborationCursor, Y, WebsocketProvider;
-if (typeof window !== 'undefined') {
-  try {
-    Collaboration = require('@tiptap/extension-collaboration').default;
-    CollaborationCursor = require('@tiptap/extension-collaboration-cursor').default;
-    Y = require('yjs');
-    WebsocketProvider = require('y-websocket').WebsocketProvider;
-  } catch (e) {
-    console.warn('Collaboration extensions not available');
-  }
-}
-
 import {
   EditorContainer,
   Toolbar,
   ToolbarDivider,
   ToolbarButton,
   EditorContent,
-  CollaboratorsBar,
-  CollaboratorBadge,
 } from './styles';
 
 const lowlight = createLowlight(common);
-
-// Generate random color for cursor
-const getRandomColor = () => {
-  const colors = [
-    '#e4ff1a', // accent yellow
-    '#ff6b6b', // coral
-    '#4ecdc4', // teal
-    '#45b7d1', // sky blue
-    '#96ceb4', // sage
-    '#ffeaa7', // cream
-    '#dfe6e9', // silver
-    '#a29bfe', // lavender
-    '#fd79a8', // pink
-    '#00b894', // mint
-  ];
-  return colors[Math.floor(Math.random() * colors.length)];
-};
-
-// Generate random name
-const getRandomName = () => {
-  const adjectives = ['Swift', 'Clever', 'Bold', 'Bright', 'Quick', 'Sharp', 'Calm', 'Keen'];
-  const nouns = ['Writer', 'Editor', 'Author', 'Scribe', 'Poet', 'Creator', 'Maker', 'Thinker'];
-  return `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`;
-};
 
 // Icons
 const icons = {
@@ -150,87 +111,11 @@ const icons = {
   ),
 };
 
-const Editor = ({ value, onChange, placeholder = 'Start writing...', roomName = 'default' }) => {
-  const [collaborators, setCollaborators] = useState([]);
-  const [collabEnabled, setCollabEnabled] = useState(false);
-  
-  // Check if collaboration is available
-  const collabAvailable = typeof window !== 'undefined' && 
-    Collaboration && CollaborationCursor && Y && WebsocketProvider &&
-    process.env.NEXT_PUBLIC_COLLAB_URL;
-  
-  // Create Yjs document and WebSocket provider (only if available)
-  const { ydoc, provider, user } = useMemo(() => {
-    if (!collabAvailable) {
-      return { ydoc: null, provider: null, user: null };
-    }
-    
-    try {
-      const doc = new Y.Doc();
-      const userColor = getRandomColor();
-      const userName = getRandomName();
-      
-      // WebSocket URL - must be WSS for HTTPS sites
-      const wsUrl = process.env.NEXT_PUBLIC_COLLAB_URL;
-      
-      const wsProvider = new WebsocketProvider(wsUrl, roomName, doc);
-      
-      // Set user awareness
-      wsProvider.awareness.setLocalStateField('user', {
-        name: userName,
-        color: userColor,
-      });
-      
-      // Track connection status
-      wsProvider.on('status', (event) => {
-        setCollabEnabled(event.status === 'connected');
-      });
-      
-      return {
-        ydoc: doc,
-        provider: wsProvider,
-        user: { name: userName, color: userColor },
-      };
-    } catch (e) {
-      console.warn('Failed to initialize collaboration:', e);
-      return { ydoc: null, provider: null, user: null };
-    }
-  }, [roomName, collabAvailable]);
-
-  // Track collaborators
-  useEffect(() => {
-    if (!provider) return;
-    
-    const updateCollaborators = () => {
-      const states = Array.from(provider.awareness.getStates().values());
-      const users = states
-        .filter(state => state.user)
-        .map(state => state.user);
-      setCollaborators(users);
-    };
-
-    provider.awareness.on('change', updateCollaborators);
-    updateCollaborators();
-
-    return () => {
-      provider.awareness.off('change', updateCollaborators);
-    };
-  }, [provider]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (provider) provider.destroy();
-      if (ydoc) ydoc.destroy();
-    };
-  }, [provider, ydoc]);
-
-  // Build extensions list
-  const extensions = useMemo(() => {
-    const exts = [
+const Editor = ({ value, onChange, placeholder = 'Start writing...' }) => {
+  const editor = useEditor({
+    extensions: [
       StarterKit.configure({
         codeBlock: false,
-        history: collabEnabled ? false : true, // Disable history only when collab is active
       }),
       Placeholder.configure({
         placeholder,
@@ -244,38 +129,29 @@ const Editor = ({ value, onChange, placeholder = 'Start writing...', roomName = 
       CodeBlockLowlight.configure({
         lowlight,
       }),
-    ];
-    
-    // Add collaboration extensions only if available and connected
-    if (collabEnabled && ydoc && provider && user && Collaboration && CollaborationCursor) {
-      exts.push(
-        Collaboration.configure({
-          document: ydoc,
-        }),
-        CollaborationCursor.configure({
-          provider,
-          user: user,
-        })
-      );
-    }
-    
-    return exts;
-  }, [placeholder, collabEnabled, ydoc, provider, user]);
-
-  const editor = useEditor({
-    extensions,
-    content: collabEnabled ? undefined : value, // Only set content when not collaborating
-    editorProps: {
-      attributes: {
-        spellcheck: 'false',
-      },
-    },
+    ],
+    content: value || '',
     onUpdate: ({ editor }) => {
       if (onChange) {
         onChange(editor.getHTML());
       }
     },
-  }, [extensions]);
+    editorProps: {
+      attributes: {
+        spellcheck: 'false',
+      },
+    },
+  });
+
+  // Update editor content when value changes from outside
+  useEffect(() => {
+    if (editor && value && !editor.isFocused) {
+      const currentContent = editor.getHTML();
+      if (value !== currentContent) {
+        editor.commands.setContent(value, false);
+      }
+    }
+  }, [editor, value]);
 
   if (!editor) {
     return null;
@@ -386,29 +262,6 @@ const Editor = ({ value, onChange, placeholder = 'Start writing...', roomName = 
         >
           {icons.hr}
         </ToolbarButton>
-
-        {/* Collaborators indicator */}
-        {collaborators.length > 1 && (
-          <>
-            <ToolbarDivider />
-            <CollaboratorsBar>
-              {collaborators.slice(0, 5).map((collab, i) => (
-                <CollaboratorBadge 
-                  key={i} 
-                  $color={collab.color}
-                  title={collab.name}
-                >
-                  {collab.name.charAt(0)}
-                </CollaboratorBadge>
-              ))}
-              {collaborators.length > 5 && (
-                <CollaboratorBadge $color="#666">
-                  +{collaborators.length - 5}
-                </CollaboratorBadge>
-              )}
-            </CollaboratorsBar>
-          </>
-        )}
       </Toolbar>
 
       <EditorContent>
