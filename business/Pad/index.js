@@ -5,7 +5,7 @@ import { useToggle, useInterval } from "react-use";
 
 import { Time, Launch } from '@carbon/icons-react';
 
-import { Textarea } from "components";
+import { Editor } from "components";
 import { Content } from 'layouts';
 import { TextareaWrapper, Info, Title, Subpads, Subpad } from "./styles";
 
@@ -99,11 +99,10 @@ const Pad = ({ name, subOf }) => {
       </Title>
 
       <TextareaWrapper>
-        <Textarea
+        <Editor
           value={content.text || ""}
           onChange={onChangePad}
           placeholder="Write something good here and share with anyone you like"
-          spaceBottom={80}
         />
         <Info>
           <Time size={20} />

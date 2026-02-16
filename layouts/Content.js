@@ -97,6 +97,51 @@ const Content = styled.div`
   img {
     max-width: 400px;
   }
+
+  /* Table styles for GFM tables */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+  }
+
+  th, td {
+    border: 1px solid #444;
+    padding: 8px 12px;
+    text-align: left;
+  }
+
+  th {
+    background: #2a2a2a;
+    font-weight: bold;
+  }
+
+  /* Strikethrough text */
+  del {
+    opacity: 0.6;
+    text-decoration: line-through;
+  }
+
+  /* Task list styles */
+  input[type="checkbox"] {
+    margin-right: 8px;
+  }
+
+  /* Syntax highlighting */
+  pre {
+    background: #1e1e1e;
+    border: 1px solid #444;
+    border-radius: 4px;
+    overflow-x: auto;
+    padding: 12px;
+    margin: 1em 0;
+  }
+
+  pre code {
+    background: transparent;
+    padding: 0;
+    color: #d4d4d4;
+  }
 `;
 
 Content.propTypes = ContentPropTypes;
