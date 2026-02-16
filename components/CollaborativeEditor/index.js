@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useEditor, EditorContent as TiptapContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -54,67 +54,65 @@ const icons = {
   hr: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="2" y1="12" x2="22" y2="12" /></svg>,
 };
 
-// Custom hook to create provider synchronously
-function useCollabProvider(collabUrl, roomName, ydoc, user) {
-  const [provider, setProvider] = useState(null);
+const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', collabUrl }) => {
   const [status, setStatus] = useState('connecting');
   const [users, setUsers] = useState([]);
 
-  useEffect(() => {
-    if (!collabUrl || !roomName) {
-      setStatus('disconnected');
-      return;
-    }
+  // Create all collaboration objects synchronously and stably
+  const collab = useMemo(() => {
+    if (typeof window === 'undefined' || !collabUrl || !roomName) return null;
 
+    const user = { name: getRandomName(), color: getRandomColor() };
+    const ydoc = new Y.Doc();
     const wsUrl = collabUrl.replace(/^http/, 'ws') + '/collab';
-    console.log('[Collab] Connecting:', wsUrl, roomName);
-
-    const wsProvider = new WebsocketProvider(wsUrl, roomName, ydoc, {
+    
+    console.log('[Collab] Creating provider:', wsUrl, roomName);
+    
+    const provider = new WebsocketProvider(wsUrl, roomName, ydoc, {
       connect: true,
       maxBackoffTime: 5000,
     });
 
-    wsProvider.on('status', ({ status: s }) => {
+    provider.awareness.setLocalStateField('user', user);
+
+    return { ydoc, provider, user };
+  }, [collabUrl, roomName]);
+
+  // Setup event listeners
+  useEffect(() => {
+    if (!collab) return;
+
+    const { provider, ydoc } = collab;
+
+    const handleStatus = ({ status: s }) => {
       console.log('[Collab] Status:', s);
       setStatus(s);
-    });
+    };
 
-    wsProvider.awareness.setLocalStateField('user', user);
-
-    const updateUsers = () => {
-      const states = wsProvider.awareness.getStates();
+    const handleAwareness = () => {
+      const states = provider.awareness.getStates();
       const list = [];
       states.forEach((state, clientId) => {
         if (state.user && clientId !== ydoc.clientID) list.push(state.user);
       });
       setUsers(list);
     };
-    wsProvider.awareness.on('change', updateUsers);
 
-    setProvider(wsProvider);
+    provider.on('status', handleStatus);
+    provider.awareness.on('change', handleAwareness);
 
     return () => {
-      wsProvider.awareness.off('change', updateUsers);
-      wsProvider.disconnect();
-      wsProvider.destroy();
-      setProvider(null);
+      provider.off('status', handleStatus);
+      provider.awareness.off('change', handleAwareness);
+      provider.disconnect();
+      provider.destroy();
+      ydoc.destroy();
     };
-  }, [collabUrl, roomName, ydoc, user]);
+  }, [collab]);
 
-  return { provider, status, users };
-}
-
-const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', collabUrl }) => {
-  // Stable refs
-  const user = useMemo(() => ({ name: getRandomName(), color: getRandomColor() }), []);
-  const ydoc = useMemo(() => new Y.Doc(), []);
-
-  // Provider hook
-  const { provider, status, users } = useCollabProvider(collabUrl, roomName, ydoc, user);
-
-  // Create editor - recreate when provider becomes available
+  // Create editor with collaboration
   const editor = useEditor({
-    extensions: [
+    extensions: collab ? [
       StarterKit.configure({ codeBlock: false, history: false }),
       Placeholder.configure({ placeholder }),
       Table.configure({ resizable: true }),
@@ -122,27 +120,28 @@ const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', colla
       TableHeader,
       TableCell,
       CodeBlockLowlight.configure({ lowlight }),
-      Collaboration.configure({ document: ydoc }),
-      ...(provider ? [
-        CollaborationCursor.configure({
-          provider,
-          user,
-          render: (u) => {
-            const cursor = document.createElement('span');
-            cursor.classList.add('collaboration-cursor__caret');
-            cursor.style.borderColor = u.color;
-            const label = document.createElement('div');
-            label.classList.add('collaboration-cursor__label');
-            label.style.backgroundColor = u.color;
-            label.textContent = u.name;
-            cursor.appendChild(label);
-            return cursor;
-          },
-        }),
-      ] : []),
+      Collaboration.configure({ document: collab.ydoc }),
+      CollaborationCursor.configure({
+        provider: collab.provider,
+        user: collab.user,
+        render: (u) => {
+          const cursor = document.createElement('span');
+          cursor.classList.add('collaboration-cursor__caret');
+          cursor.style.borderColor = u.color;
+          const label = document.createElement('div');
+          label.classList.add('collaboration-cursor__label');
+          label.style.backgroundColor = u.color;
+          label.textContent = u.name;
+          cursor.appendChild(label);
+          return cursor;
+        },
+      }),
+    ] : [
+      StarterKit,
+      Placeholder.configure({ placeholder }),
     ],
     editorProps: { attributes: { spellcheck: 'false' } },
-  }, [ydoc, provider]); // Recreate when provider changes
+  }, [collab]);
 
   if (!editor) {
     return (
