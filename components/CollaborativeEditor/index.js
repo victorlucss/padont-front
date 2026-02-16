@@ -66,21 +66,8 @@ function TiptapEditor({ ydoc, provider, user, placeholder, status, users }) {
       TableCell,
       CodeBlockLowlight.configure({ lowlight }),
       Collaboration.configure({ document: ydoc }),
-      CollaborationCursor.configure({
-        provider,
-        user,
-        render: (u) => {
-          const cursor = document.createElement('span');
-          cursor.classList.add('collaboration-cursor__caret');
-          cursor.style.borderColor = u.color;
-          const label = document.createElement('div');
-          label.classList.add('collaboration-cursor__label');
-          label.style.backgroundColor = u.color;
-          label.textContent = u.name;
-          cursor.appendChild(label);
-          return cursor;
-        },
-      }),
+      // CollaborationCursor temporarily disabled for debugging
+      // CollaborationCursor.configure({ provider, user }),
     ],
     editorProps: { attributes: { spellcheck: 'false' } },
   });
