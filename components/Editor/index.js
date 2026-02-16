@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useEditor, EditorContent as TiptapContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -7,7 +7,11 @@ import { TableRow } from '@tiptap/extension-table-row';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import Collaboration from '@tiptap/extension-collaboration';
+import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import { common, createLowlight } from 'lowlight';
+import * as Y from 'yjs';
+import { WebsocketProvider } from 'y-websocket';
 
 import {
   EditorContainer,
@@ -15,9 +19,35 @@ import {
   ToolbarDivider,
   ToolbarButton,
   EditorContent,
+  CollaboratorsBar,
+  CollaboratorBadge,
 } from './styles';
 
 const lowlight = createLowlight(common);
+
+// Generate random color for cursor
+const getRandomColor = () => {
+  const colors = [
+    '#e4ff1a', // accent yellow
+    '#ff6b6b', // coral
+    '#4ecdc4', // teal
+    '#45b7d1', // sky blue
+    '#96ceb4', // sage
+    '#ffeaa7', // cream
+    '#dfe6e9', // silver
+    '#a29bfe', // lavender
+    '#fd79a8', // pink
+    '#00b894', // mint
+  ];
+  return colors[Math.floor(Math.random() * colors.length)];
+};
+
+// Generate random name
+const getRandomName = () => {
+  const adjectives = ['Swift', 'Clever', 'Bold', 'Bright', 'Quick', 'Sharp', 'Calm', 'Keen'];
+  const nouns = ['Writer', 'Editor', 'Author', 'Scribe', 'Poet', 'Creator', 'Maker', 'Thinker'];
+  return `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`;
+};
 
 // Icons
 const icons = {
@@ -111,11 +141,66 @@ const icons = {
   ),
 };
 
-const Editor = ({ value, onChange, placeholder = 'Start writing...' }) => {
+const Editor = ({ value, onChange, placeholder = 'Start writing...', roomName = 'default' }) => {
+  const [collaborators, setCollaborators] = useState([]);
+  
+  // Create Yjs document and WebSocket provider
+  const { ydoc, provider, user } = useMemo(() => {
+    const doc = new Y.Doc();
+    const userColor = getRandomColor();
+    const userName = getRandomName();
+    
+    // WebSocket URL - use environment variable or default
+    const wsUrl = typeof window !== 'undefined' 
+      ? (process.env.NEXT_PUBLIC_COLLAB_URL || `ws://${window.location.hostname}:1234`)
+      : 'ws://localhost:1234';
+    
+    const wsProvider = new WebsocketProvider(wsUrl, roomName, doc);
+    
+    // Set user awareness
+    wsProvider.awareness.setLocalStateField('user', {
+      name: userName,
+      color: userColor,
+    });
+    
+    return {
+      ydoc: doc,
+      provider: wsProvider,
+      user: { name: userName, color: userColor },
+    };
+  }, [roomName]);
+
+  // Track collaborators
+  useEffect(() => {
+    const updateCollaborators = () => {
+      const states = Array.from(provider.awareness.getStates().values());
+      const users = states
+        .filter(state => state.user)
+        .map(state => state.user);
+      setCollaborators(users);
+    };
+
+    provider.awareness.on('change', updateCollaborators);
+    updateCollaborators();
+
+    return () => {
+      provider.awareness.off('change', updateCollaborators);
+    };
+  }, [provider]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      provider.destroy();
+      ydoc.destroy();
+    };
+  }, [provider, ydoc]);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
         codeBlock: false,
+        history: false, // Disable default history, Yjs handles this
       }),
       Placeholder.configure({
         placeholder,
@@ -129,24 +214,25 @@ const Editor = ({ value, onChange, placeholder = 'Start writing...' }) => {
       CodeBlockLowlight.configure({
         lowlight,
       }),
+      Collaboration.configure({
+        document: ydoc,
+      }),
+      CollaborationCursor.configure({
+        provider,
+        user: user,
+      }),
     ],
-    content: value,
-    onUpdate: ({ editor }) => {
-      onChange(editor.getHTML());
-    },
     editorProps: {
       attributes: {
         spellcheck: 'false',
       },
     },
+    onUpdate: ({ editor }) => {
+      if (onChange) {
+        onChange(editor.getHTML());
+      }
+    },
   });
-
-  // Update editor content when value changes externally
-  useEffect(() => {
-    if (editor && value !== editor.getHTML()) {
-      editor.commands.setContent(value || '');
-    }
-  }, [editor, value]);
 
   if (!editor) {
     return null;
@@ -257,6 +343,29 @@ const Editor = ({ value, onChange, placeholder = 'Start writing...' }) => {
         >
           {icons.hr}
         </ToolbarButton>
+
+        {/* Collaborators indicator */}
+        {collaborators.length > 1 && (
+          <>
+            <ToolbarDivider />
+            <CollaboratorsBar>
+              {collaborators.slice(0, 5).map((collab, i) => (
+                <CollaboratorBadge 
+                  key={i} 
+                  $color={collab.color}
+                  title={collab.name}
+                >
+                  {collab.name.charAt(0)}
+                </CollaboratorBadge>
+              ))}
+              {collaborators.length > 5 && (
+                <CollaboratorBadge $color="#666">
+                  +{collaborators.length - 5}
+                </CollaboratorBadge>
+              )}
+            </CollaboratorsBar>
+          </>
+        )}
       </Toolbar>
 
       <EditorContent>

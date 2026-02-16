@@ -136,6 +136,7 @@ const Pad = ({ name, subOf }) => {
               value={content.text || ""}
               onChange={onChangePad}
               placeholder="Start writing..."
+              roomName={subOf ? `${subOf}-${name}` : name}
             />
           </TextareaWrapper>
           
