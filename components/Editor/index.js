@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useEditor, EditorContent as TiptapContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -139,6 +140,13 @@ const Editor = ({ value, onChange, placeholder = 'Start writing...' }) => {
       },
     },
   });
+
+  // Update editor content when value changes externally
+  useEffect(() => {
+    if (editor && value !== editor.getHTML()) {
+      editor.commands.setContent(value || '');
+    }
+  }, [editor, value]);
 
   if (!editor) {
     return null;

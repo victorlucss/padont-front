@@ -2,10 +2,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import styled, { keyframes } from "styled-components";
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
-
 import { colors } from 'styles';
 import { padService } from "api";
 import formatDate from 'utils/formatDate';
@@ -455,12 +451,7 @@ export default function View() {
 
       <Content>
         {content?.text ? (
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeHighlight]}
-          >
-            {content.text}
-          </ReactMarkdown>
+          <div dangerouslySetInnerHTML={{ __html: content.text }} />
         ) : (
           <Empty>
             <p>This pad is empty.</p>

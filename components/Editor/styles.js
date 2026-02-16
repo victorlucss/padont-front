@@ -57,9 +57,11 @@ export const EditorContent = styled.div`
   flex: 1;
   padding: 32px;
   overflow-y: auto;
+  min-height: 0;
   
   .ProseMirror {
-    min-height: 100%;
+    min-height: calc(100vh - 200px);
+    height: 100%;
     outline: none;
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.9375rem;

@@ -20,7 +20,9 @@ export default function handler(req, res) {
   if (req.method === 'GET') {
     // Get or create pad
     const defaultContent = {
-      content: '',
+      text: '',
+      title: pad,
+      subpads: [],
       author: null,
       lastIp: null,
       updatedAt: new Date().toISOString()
