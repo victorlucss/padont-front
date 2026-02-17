@@ -31,12 +31,18 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/server.js ./server.js
-# HocusPocus packages (replaces y-websocket)
+# HocusPocus packages and all transitive dependencies
 COPY --from=builder /app/node_modules/@hocuspocus ./node_modules/@hocuspocus
 COPY --from=builder /app/node_modules/yjs ./node_modules/yjs
 COPY --from=builder /app/node_modules/ws ./node_modules/ws
 COPY --from=builder /app/node_modules/lib0 ./node_modules/lib0
 COPY --from=builder /app/node_modules/y-protocols ./node_modules/y-protocols
+# @hocuspocus/server transitive deps
+COPY --from=builder /app/node_modules/async-lock ./node_modules/async-lock
+COPY --from=builder /app/node_modules/async-mutex ./node_modules/async-mutex
+COPY --from=builder /app/node_modules/kleur ./node_modules/kleur
+# @hocuspocus/provider transitive deps
+COPY --from=builder /app/node_modules/@lifeomic ./node_modules/@lifeomic
 
 USER nextjs
 
