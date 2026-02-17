@@ -31,10 +31,12 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/server.js ./server.js
-COPY --from=builder /app/node_modules/y-websocket ./node_modules/y-websocket
+# HocusPocus packages (replaces y-websocket)
+COPY --from=builder /app/node_modules/@hocuspocus ./node_modules/@hocuspocus
 COPY --from=builder /app/node_modules/yjs ./node_modules/yjs
 COPY --from=builder /app/node_modules/ws ./node_modules/ws
 COPY --from=builder /app/node_modules/lib0 ./node_modules/lib0
+COPY --from=builder /app/node_modules/y-protocols ./node_modules/y-protocols
 
 USER nextjs
 
