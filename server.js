@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Next.js server with y-websocket collaboration + Convex persistence
+ * Next.js server with y-websocket collaboration + Convex persistence (HTTP API)
  */
 
 const { createServer } = require('http');
@@ -9,36 +9,54 @@ const next = require('next');
 const WebSocket = require('ws');
 const Y = require('yjs');
 const { setupWSConnection, docs } = require('y-websocket/bin/utils');
-const { ConvexHttpClient } = require('convex/browser');
-const { api } = require('./convex/_generated/api');
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
 const port = parseInt(process.env.PORT, 10) || 3000;
 
-// Convex client
-const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || 'https://abundant-meadowlark-701.convex.cloud';
-const convex = new ConvexHttpClient(CONVEX_URL);
+// Convex HTTP API
+const CONVEX_URL = 'https://abundant-meadowlark-701.convex.cloud';
 
-// Track which docs have been loaded from Convex
+// Track which docs have been loaded
 const loadedDocs = new Set();
 const pendingSaves = new Map();
-const SAVE_DELAY = 3000; // Save 3 seconds after last change
+const SAVE_DELAY = 3000;
+
+/**
+ * Call Convex function via HTTP
+ */
+async function convexCall(type, functionName, args) {
+  try {
+    const response = await fetch(`${CONVEX_URL}/api/${type}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: functionName,
+        args: args,
+      }),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+    }
+    
+    const data = await response.json();
+    return data.value;
+  } catch (err) {
+    console.error(`[Convex] Error calling ${functionName}:`, err.message);
+    return null;
+  }
+}
 
 /**
  * Load document from Convex
  */
 async function loadFromConvex(docName) {
-  try {
-    const result = await convex.query(api.documents.get, { name: docName });
-    if (result && result.state) {
-      // Decode base64 to Uint8Array
-      const buffer = Buffer.from(result.state, 'base64');
-      console.log(`[Convex] Loaded: ${docName} (${buffer.length} bytes)`);
-      return new Uint8Array(buffer);
-    }
-  } catch (err) {
-    console.error(`[Convex] Error loading ${docName}:`, err.message);
+  const result = await convexCall('query', 'documents:get', { name: docName });
+  if (result && result.state) {
+    const buffer = Buffer.from(result.state, 'base64');
+    console.log(`[Convex] Loaded: ${docName} (${buffer.length} bytes)`);
+    return new Uint8Array(buffer);
   }
   return null;
 }
@@ -47,14 +65,9 @@ async function loadFromConvex(docName) {
  * Save document to Convex
  */
 async function saveToConvex(docName, state) {
-  try {
-    // Encode Uint8Array to base64
-    const base64 = Buffer.from(state).toString('base64');
-    await convex.mutation(api.documents.save, { name: docName, state: base64 });
-    console.log(`[Convex] Saved: ${docName} (${state.length} bytes)`);
-  } catch (err) {
-    console.error(`[Convex] Error saving ${docName}:`, err.message);
-  }
+  const base64 = Buffer.from(state).toString('base64');
+  await convexCall('mutation', 'documents:save', { name: docName, state: base64 });
+  console.log(`[Convex] Saved: ${docName} (${state.length} bytes)`);
 }
 
 /**
@@ -82,22 +95,28 @@ function scheduleSave(docName) {
  */
 async function initDoc(docName) {
   if (loadedDocs.has(docName)) return;
+  loadedDocs.add(docName);
+  
+  // Wait a bit for y-websocket to create the doc
+  await new Promise(r => setTimeout(r, 100));
   
   const doc = docs.get(docName);
-  if (!doc) return;
+  if (!doc) {
+    console.log(`[Convex] Doc not found in y-websocket: ${docName}`);
+    return;
+  }
   
   // Try to load from Convex
   const savedState = await loadFromConvex(docName);
   if (savedState && savedState.length > 2) {
     Y.applyUpdate(doc, savedState);
+    console.log(`[Convex] Applied state to: ${docName}`);
   }
   
   // Setup save on updates
   doc.on('update', () => {
     scheduleSave(docName);
   });
-  
-  loadedDocs.add(docName);
 }
 
 const app = next({ dev, hostname, port });
@@ -136,7 +155,7 @@ app.prepare().then(() => {
     setupWSConnection(ws, req, { docName, gc: true });
     
     // Then init from Convex (async)
-    await initDoc(docName);
+    initDoc(docName);
     
     ws.on('close', async () => {
       console.log(`[Collab] Disconnected: ${docName}`);
@@ -178,6 +197,6 @@ app.prepare().then(() => {
   server.listen(port, hostname, () => {
     console.log(`🚀 Server ready at http://${hostname}:${port}`);
     console.log(`📝 Collab: ws://${hostname}:${port}/collab/{room}`);
-    console.log(`💾 Persistence: Convex (${CONVEX_URL})`);
+    console.log(`💾 Persistence: Convex`);
   });
 });
