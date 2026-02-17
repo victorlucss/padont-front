@@ -23,13 +23,10 @@ import {
 import { padService } from "api";
 import formatDate from 'utils/formatDate';
 
+// Collab URL - hardcoded to avoid hydration issues
+const COLLAB_URL = 'https://pad.tianxu.cloud';
+
 const Pad = ({ name, subOf }) => {
-  // Get collab URL on client side only to avoid hydration mismatch
-  const [collabUrl, setCollabUrl] = useState('');
-  
-  useEffect(() => {
-    setCollabUrl(process.env.NEXT_PUBLIC_COLLAB_URL || window.location.origin);
-  }, []);
   const [changed, toggleChanged] = useToggle(false);
   const [saving, setSaving] = useState(false);
   const [content, setContent] = useState({});
@@ -43,7 +40,7 @@ const Pad = ({ name, subOf }) => {
   }, [name, subOf]);
 
   // Check if collaboration is enabled
-  const isCollabEnabled = Boolean(collabUrl);
+  const isCollabEnabled = Boolean(COLLAB_URL);
 
   const onChangePad = (text) => {
     toggleChanged(true);
@@ -158,7 +155,7 @@ const Pad = ({ name, subOf }) => {
             {isCollabEnabled ? (
               <CollaborativeEditor
                 roomName={roomName}
-                collabUrl={collabUrl}
+                collabUrl={COLLAB_URL}
                 placeholder="Start writing... (collaborative mode)"
                 onSynced={() => setCollabSynced(true)}
               />
