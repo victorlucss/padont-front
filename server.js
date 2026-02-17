@@ -1,26 +1,21 @@
 #!/usr/bin/env node
 /**
- * Next.js server with y-websocket collaboration + Convex persistence (HTTP API)
+ * Next.js server with HocusPocus collaboration + Convex persistence
  */
 
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
 const WebSocket = require('ws');
-const Y = require('yjs');
-const { setupWSConnection, docs } = require('y-websocket/bin/utils');
+const { Hocuspocus } = require('@hocuspocus/server');
+const { Database } = require('@hocuspocus/extension-database');
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
 const port = parseInt(process.env.PORT, 10) || 3000;
 
 // Convex HTTP API
-const CONVEX_URL = 'https://abundant-meadowlark-701.convex.cloud';
-
-// Track which docs have been loaded
-const loadedDocs = new Set();
-const pendingSaves = new Map();
-const SAVE_DELAY = 3000;
+const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL || 'https://abundant-meadowlark-701.convex.cloud';
 
 /**
  * Call Convex function via HTTP
@@ -49,7 +44,7 @@ async function convexCall(type, functionName, args) {
 }
 
 /**
- * Load document from Convex
+ * Load document from Convex (returns Uint8Array or null)
  */
 async function loadFromConvex(docName) {
   const result = await convexCall('query', 'documents:get', { name: docName });
@@ -58,6 +53,7 @@ async function loadFromConvex(docName) {
     console.log(`[Convex] Loaded: ${docName} (${buffer.length} bytes)`);
     return new Uint8Array(buffer);
   }
+  console.log(`[Convex] No existing document: ${docName}`);
   return null;
 }
 
@@ -70,54 +66,45 @@ async function saveToConvex(docName, state) {
   console.log(`[Convex] Saved: ${docName} (${state.length} bytes)`);
 }
 
-/**
- * Schedule a save (debounced)
- */
-function scheduleSave(docName) {
-  if (pendingSaves.has(docName)) {
-    clearTimeout(pendingSaves.get(docName));
-  }
+// Configure HocusPocus server (don't call listen - we'll use handleConnection)
+const hocuspocus = new Hocuspocus({
+  // Debounce saves - HocusPocus handles this better than our manual implementation
+  debounce: 3000,
+  // Max debounce wait time
+  maxDebounce: 10000,
   
-  pendingSaves.set(docName, setTimeout(async () => {
-    const doc = docs.get(docName);
-    if (doc) {
-      const state = Y.encodeStateAsUpdate(doc);
-      if (state.length > 2) {
-        await saveToConvex(docName, state);
-      }
-    }
-    pendingSaves.delete(docName);
-  }, SAVE_DELAY));
-}
+  extensions: [
+    new Database({
+      // Fetch document state from Convex
+      fetch: async ({ documentName }) => {
+        return await loadFromConvex(documentName);
+      },
+      // Store document state to Convex
+      store: async ({ documentName, state }) => {
+        // Only save if there's actual content (state > 2 bytes)
+        if (state && state.length > 2) {
+          await saveToConvex(documentName, state);
+        }
+      },
+    }),
+  ],
+  
+  // Optional: Add hooks for logging/monitoring
+  async onConnect({ documentName, requestHeaders }) {
+    console.log(`[HocusPocus] Client connecting to: ${documentName}`);
+  },
+  
+  async onDisconnect({ documentName, clientsCount }) {
+    console.log(`[HocusPocus] Client disconnected from: ${documentName} (${clientsCount} remaining)`);
+  },
+  
+  async onStoreDocument({ documentName }) {
+    console.log(`[HocusPocus] Document stored: ${documentName}`);
+  },
+});
 
-/**
- * Initialize document with Convex data
- */
-async function initDoc(docName) {
-  if (loadedDocs.has(docName)) return;
-  loadedDocs.add(docName);
-  
-  // Wait a bit for y-websocket to create the doc
-  await new Promise(r => setTimeout(r, 100));
-  
-  const doc = docs.get(docName);
-  if (!doc) {
-    console.log(`[Convex] Doc not found in y-websocket: ${docName}`);
-    return;
-  }
-  
-  // Try to load from Convex
-  const savedState = await loadFromConvex(docName);
-  if (savedState && savedState.length > 2) {
-    Y.applyUpdate(doc, savedState);
-    console.log(`[Convex] Applied state to: ${docName}`);
-  }
-  
-  // Setup save on updates
-  doc.on('update', () => {
-    scheduleSave(docName);
-  });
-}
+// Create WebSocket server for upgrade handling (noServer mode)
+const wss = new WebSocket.Server({ noServer: true });
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
@@ -127,11 +114,13 @@ app.prepare().then(() => {
     try {
       const parsedUrl = parse(req.url, true);
       
+      // Health check endpoint
       if (parsedUrl.pathname === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ 
           status: 'ok', 
-          rooms: docs.size,
+          rooms: hocuspocus.getDocumentsCount(),
+          connections: hocuspocus.getConnectionsCount(),
           persistence: 'convex',
           timestamp: new Date().toISOString()
         }));
@@ -146,62 +135,29 @@ app.prepare().then(() => {
     }
   });
 
-  const wss = new WebSocket.Server({ noServer: true });
-
-  wss.on('connection', async (ws, req, docName) => {
-    console.log(`[Collab] Connected: ${docName}`);
+  // Handle WebSocket upgrades
+  server.on('upgrade', (request, socket, head) => {
+    const { pathname } = parse(request.url);
     
-    // Setup y-websocket first
-    setupWSConnection(ws, req, { docName, gc: true });
-    
-    // Then init from Convex (async)
-    initDoc(docName);
-    
-    ws.on('close', async () => {
-      console.log(`[Collab] Disconnected: ${docName}`);
-      
-      // Force save on disconnect
-      const doc = docs.get(docName);
-      if (doc) {
-        const state = Y.encodeStateAsUpdate(doc);
-        if (state.length > 2) {
-          await saveToConvex(docName, state);
-        }
-        
-        // Clear loadedDocs when last client disconnects (allow re-init on next connection)
-        if (doc.conns && doc.conns.size === 0) {
-          loadedDocs.delete(docName);
-        }
-      }
-    });
-  });
-
-  server.on('upgrade', (req, socket, head) => {
-    const { pathname } = parse(req.url);
-    
+    // Match /collab/{room} pattern
     if (pathname && pathname.startsWith('/collab/')) {
-      const docName = pathname.slice(8) || 'default';
-      wss.handleUpgrade(req, socket, head, (ws) => {
-        wss.emit('connection', ws, req, docName);
+      const documentName = pathname.slice(8) || 'default';
+      
+      // IMPORTANT: Use wss.handleUpgrade to create the WebSocket,
+      // then pass it to hocuspocus.handleConnection (NOT handleUpgrade!)
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        // Pass the WebSocket, request, and context to HocusPocus
+        hocuspocus.handleConnection(ws, request, { documentName });
       });
     } else {
+      // Not a collab request - destroy the socket
       socket.destroy();
     }
   });
 
-  // Periodic save every 30 seconds
-  setInterval(() => {
-    docs.forEach(async (doc, docName) => {
-      const state = Y.encodeStateAsUpdate(doc);
-      if (state.length > 2) {
-        await saveToConvex(docName, state);
-      }
-    });
-  }, 30000);
-
   server.listen(port, hostname, () => {
     console.log(`🚀 Server ready at http://${hostname}:${port}`);
     console.log(`📝 Collab: ws://${hostname}:${port}/collab/{room}`);
-    console.log(`💾 Persistence: Convex`);
+    console.log(`💾 Persistence: Convex (via @hocuspocus/extension-database)`);
   });
 });
