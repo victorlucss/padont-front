@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useEditor, EditorContent as TiptapContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -192,31 +192,44 @@ function TiptapEditor({ collab, placeholder }) {
 // Main component - handles provider lifecycle
 const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', collabUrl }) => {
   const [collab, setCollab] = useState(null);
+  const providerRef = useRef(null); // Guard against StrictMode double-init
 
   useEffect(() => {
     if (!collabUrl || !roomName) return;
+    if (providerRef.current) return; // Already initialized, skip (StrictMode guard)
 
     const user = { name: getRandomName(), color: getRandomColor() };
     const ydoc = new Y.Doc();
-    const wsUrl = collabUrl.replace(/^http/, 'ws') + '/collab';
+    // Robust ws URL construction
+    const wsUrl = collabUrl.replace(/^https?/, (m) => m === 'https' ? 'wss' : 'ws') + '/collab';
     
     console.log('[Collab] Creating:', wsUrl, roomName);
     
     const provider = new WebsocketProvider(wsUrl, roomName, ydoc, {
-      connect: true,
+      connect: false, // Don't auto-connect, we'll do it explicitly
       maxBackoffTime: 5000,
     });
 
     provider.awareness.setLocalStateField('user', user);
-
+    providerRef.current = { ydoc, provider }; // Save ref BEFORE connecting
+    
+    provider.connect(); // Connect explicitly after setup complete
     setCollab({ ydoc, provider, user });
 
     return () => {
       console.log('[Collab] Cleanup');
+      providerRef.current = null; // Clear ref
       setCollab(null);
-      provider.disconnect();
-      provider.destroy();
-      ydoc.destroy();
+      
+      // Defer destroy until AFTER React unmounts TiptapEditor
+      // (setCollab triggers unmount, setTimeout 0 runs after that paint)
+      const p = provider;
+      const d = ydoc;
+      setTimeout(() => {
+        p.disconnect();
+        p.destroy();
+        d.destroy();
+      }, 0);
     };
   }, [collabUrl, roomName]);
 

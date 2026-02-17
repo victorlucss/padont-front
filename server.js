@@ -167,6 +167,11 @@ app.prepare().then(() => {
         if (state.length > 2) {
           await saveToConvex(docName, state);
         }
+        
+        // Clear loadedDocs when last client disconnects (allow re-init on next connection)
+        if (doc.conns && doc.conns.size === 0) {
+          loadedDocs.delete(docName);
+        }
       }
     });
   });
