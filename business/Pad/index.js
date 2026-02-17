@@ -23,10 +23,13 @@ import {
 import { padService } from "api";
 import formatDate from 'utils/formatDate';
 
-// Get collaboration URL from env (same origin by default)
-const COLLAB_URL = process.env.NEXT_PUBLIC_COLLAB_URL || (typeof window !== 'undefined' ? window.location.origin : '');
-
 const Pad = ({ name, subOf }) => {
+  // Get collab URL on client side only to avoid hydration mismatch
+  const [collabUrl, setCollabUrl] = useState('');
+  
+  useEffect(() => {
+    setCollabUrl(process.env.NEXT_PUBLIC_COLLAB_URL || window.location.origin);
+  }, []);
   const [changed, toggleChanged] = useToggle(false);
   const [saving, setSaving] = useState(false);
   const [content, setContent] = useState({});
@@ -39,8 +42,8 @@ const Pad = ({ name, subOf }) => {
     return padName.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
   }, [name, subOf]);
 
-  // Check if collaboration is enabled (always enabled with same-origin WebSocket)
-  const isCollabEnabled = Boolean(COLLAB_URL);
+  // Check if collaboration is enabled
+  const isCollabEnabled = Boolean(collabUrl);
 
   const onChangePad = (text) => {
     toggleChanged(true);
@@ -155,7 +158,7 @@ const Pad = ({ name, subOf }) => {
             {isCollabEnabled ? (
               <CollaborativeEditor
                 roomName={roomName}
-                collabUrl={COLLAB_URL}
+                collabUrl={collabUrl}
                 placeholder="Start writing... (collaborative mode)"
                 onSynced={() => setCollabSynced(true)}
               />
