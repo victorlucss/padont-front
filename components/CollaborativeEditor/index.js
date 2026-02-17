@@ -10,7 +10,7 @@ import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Collaboration from '@tiptap/extension-collaboration';
 import { common, createLowlight } from 'lowlight';
 import * as Y from 'yjs';
-import { WebsocketProvider } from 'y-websocket';
+import { HocuspocusProvider } from '@hocuspocus/provider';
 import { yCursorPlugin } from 'y-prosemirror';
 import { Extension } from '@tiptap/core';
 
@@ -94,31 +94,34 @@ function TiptapEditor({ collab, placeholder }) {
   
   const { ydoc, provider, user } = collab;
 
-  // Setup event listeners
+  // Setup event listeners for HocuspocusProvider
   useEffect(() => {
+    // HocuspocusProvider uses different event names
     const handleStatus = ({ status: s }) => {
       console.log('[Collab] Status:', s);
       setStatus(s);
     };
 
-    const handleAwareness = () => {
-      const states = provider.awareness.getStates();
-      const list = [];
-      states.forEach((state, clientId) => {
-        if (state.user && clientId !== ydoc.clientID) list.push(state.user);
-      });
+    const handleAwareness = ({ states }) => {
+      // HocuspocusProvider gives us states directly in onAwarenessChange
+      const list = states
+        .filter(state => state.user && state.clientId !== ydoc.clientID)
+        .map(state => state.user);
       setUsers(list);
     };
 
+    // HocuspocusProvider event names
     provider.on('status', handleStatus);
-    provider.awareness.on('change', handleAwareness);
+    provider.on('awarenessChange', handleAwareness);
     
-    // Initial check
-    handleAwareness();
+    // Initial status check
+    if (provider.isConnected) {
+      setStatus('connected');
+    }
 
     return () => {
       provider.off('status', handleStatus);
-      provider.awareness.off('change', handleAwareness);
+      provider.off('awarenessChange', handleAwareness);
     };
   }, [provider, ydoc]);
 
@@ -132,7 +135,8 @@ function TiptapEditor({ collab, placeholder }) {
     TableCell,
     CodeBlockLowlight.configure({ lowlight }),
     Collaboration.configure({ document: ydoc }),
-    // Skip cursor for now - debug
+    // Cursor extension (can enable later if needed)
+    // createCursorExtension(provider, user),
   ];
 
   const editor = useEditor({
@@ -189,44 +193,60 @@ function TiptapEditor({ collab, placeholder }) {
   );
 }
 
-// Main component - handles provider lifecycle
+// Main component - handles HocuspocusProvider lifecycle
 const CollaborativeEditor = ({ roomName, placeholder = 'Start writing...', collabUrl }) => {
   const [collab, setCollab] = useState(null);
-  const providerRef = useRef(null); // Guard against StrictMode double-init
+  const providerRef = useRef(null);
 
   useEffect(() => {
     if (!collabUrl || !roomName) return;
-    if (providerRef.current) return; // Already initialized, skip (StrictMode guard)
+    if (providerRef.current) return; // StrictMode guard
 
     const user = { name: getRandomName(), color: getRandomColor() };
     const ydoc = new Y.Doc();
-    // Robust ws URL construction
-    const wsUrl = collabUrl.replace(/^https?/, (m) => m === 'https' ? 'wss' : 'ws') + '/collab';
     
-    console.log('[Collab] Creating:', wsUrl, roomName);
+    // Build WebSocket URL for HocusPocus
+    // HocuspocusProvider wants the full URL including document name
+    const wsBase = collabUrl.replace(/^https?/, (m) => m === 'https' ? 'wss' : 'ws');
+    const wsUrl = `${wsBase}/collab`;
     
-    const provider = new WebsocketProvider(wsUrl, roomName, ydoc, {
-      connect: false, // Don't auto-connect, we'll do it explicitly
-      maxBackoffTime: 5000,
+    console.log('[Collab] Creating HocuspocusProvider:', wsUrl, roomName);
+    
+    // Create HocuspocusProvider - much cleaner than y-websocket
+    const provider = new HocuspocusProvider({
+      url: wsUrl,
+      name: roomName, // Document name (room)
+      document: ydoc,
+      // Set user info for awareness
+      onAwarenessUpdate: ({ states }) => {
+        // Optional: log awareness updates
+      },
+      onConnect: () => {
+        console.log('[Collab] Connected to:', roomName);
+      },
+      onDisconnect: () => {
+        console.log('[Collab] Disconnected from:', roomName);
+      },
+      onSynced: ({ state }) => {
+        console.log('[Collab] Synced:', roomName, state);
+      },
     });
 
-    provider.awareness.setLocalStateField('user', user);
-    providerRef.current = { ydoc, provider }; // Save ref BEFORE connecting
+    // Set user in awareness
+    provider.awareness?.setLocalStateField('user', user);
     
-    provider.connect(); // Connect explicitly after setup complete
+    providerRef.current = { ydoc, provider };
     setCollab({ ydoc, provider, user });
 
     return () => {
       console.log('[Collab] Cleanup');
-      providerRef.current = null; // Clear ref
+      providerRef.current = null;
       setCollab(null);
       
-      // Defer destroy until AFTER React unmounts TiptapEditor
-      // (setCollab triggers unmount, setTimeout 0 runs after that paint)
+      // HocuspocusProvider handles cleanup more gracefully
       const p = provider;
       const d = ydoc;
       setTimeout(() => {
-        p.disconnect();
         p.destroy();
         d.destroy();
       }, 0);
